@@ -10,7 +10,7 @@ import vk "vendor:vulkan"
 _vulkan_lib: dynlib.Library = nil
 
 @(init)
-@(private)
+@(private = "file")
 init_vulkan_library :: proc() {
 	loaded := false
 
@@ -50,7 +50,7 @@ init_vulkan_library :: proc() {
 }
 
 @(fini)
-@(private)
+@(private = "file")
 deinit_vulkan_library :: proc() {
 	dynlib.unload_library(_vulkan_lib)
 }
