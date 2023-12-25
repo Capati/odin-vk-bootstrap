@@ -43,7 +43,7 @@ Queue_Error :: enum {
 Device_Error :: enum {
 	None,
 	Failed_Create_Device,
-	Vk_Physical_Device_Features2_In_P_Next_Chain_While_Using_Add_Required_Extension_Features,
+	Physical_Device_Features2_In_P_Next_Chain_With_Add_Required_Extension_Features,
 }
 
 @(private)

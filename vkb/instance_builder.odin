@@ -358,8 +358,6 @@ build_instance :: proc(self: ^Instance_Builder) -> (instance: ^Instance, err: Er
 	instance.instance_version = instance_version
 	instance.api_version = api_version
 
-	log.info("Instance created successfully!")
-
 	return
 }
 
