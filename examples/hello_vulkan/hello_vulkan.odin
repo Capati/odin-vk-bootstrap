@@ -16,7 +16,7 @@ MINIMUM_API_VERSION :: vk.API_VERSION_1_2
 
 create_instance :: proc() -> (instance: ^vkb.Instance, err: vkb.Error) {
 	// Create a new instance builder
-	builder := vkb.init_instance_builder() or_return
+	builder := vkb.init_instance_builder()
 	defer vkb.destroy_instance_builder(&builder)
 
 	// Require the minimum Vulkan api version 1.2
@@ -68,6 +68,20 @@ request_physical_device :: proc(
 
 	// Try to select a suitable device
 	return vkb.selector_select(&selector)
+}
+
+request_device :: proc(
+	physical_device: ^vkb.Physical_Device,
+) -> (
+	device: ^vkb.Device,
+	err: vkb.Error,
+) {
+	builder := vkb.init_device_builder(physical_device)
+	defer vkb.destroy_device_builder(&builder)
+
+	vkb.device_builder_graphics_queue_has_priority(&builder, true)
+
+	return vkb.device_builder_build(&builder)
 }
 
 main :: proc() {
@@ -128,6 +142,10 @@ main :: proc() {
 	// In Vulkan you don't need to destroy a physical device, but here you need
 	// to free some resources when the physical device was created.
 	defer vkb.destroy_physical_device(physical_device)
+
+	device, device_err := request_device(physical_device)
+	if device_err != nil do return
+	defer vkb.destroy_device(device)
 
 	running := true
 
