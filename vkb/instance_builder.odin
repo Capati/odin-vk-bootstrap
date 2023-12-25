@@ -47,7 +47,7 @@ Instance_Builder :: struct {
 _logger: log.Logger
 
 // Create an `Instance_Builder` with some defaults.
-init_instance_builder :: proc() -> (builder: Instance_Builder, err: Error) {
+init_instance_builder :: proc() -> (builder: Instance_Builder) {
 	_logger = context.logger
 
 	builder.required_api_version = vk.API_VERSION_1_0
