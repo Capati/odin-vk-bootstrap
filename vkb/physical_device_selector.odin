@@ -41,7 +41,7 @@ Selection_Criteria :: struct {
 	required_version:                 u32,
 	required_features:                vk.PhysicalDeviceFeatures,
 	required_features2:               vk.PhysicalDeviceFeatures2,
-	// extended_features_chain:          [dynamic]Generic_Features_P_Next_Node,
+	extended_features_chain:          [dynamic]Generic_Feature,
 	defer_surface_initialization:     bool,
 	use_first_gpu_unconditionally:    bool,
 	enable_portability_subset:        bool,
@@ -93,6 +93,7 @@ init_physical_device_selector :: proc(
 
 destroy_selection_criteria :: proc(self: ^Physical_Device_Selector) {
 	delete(self.criteria.required_extensions)
+	delete(self.criteria.extended_features_chain)
 }
 
 Device_Selection_Mode :: enum {
@@ -132,7 +133,7 @@ selector_select :: proc(
 
 	physical_device = selected_devices[0]
 
-	log.infof("Selected device: %s", physical_device.name)
+	log.infof("Selected physical device: %s", physical_device.name)
 
 	return
 }
@@ -197,9 +198,15 @@ selector_select_impl :: proc(
 	fill_out_phys_dev_with_criteria :: proc(
 		self: ^Physical_Device_Selector,
 		physical_device: ^Physical_Device,
+	) -> (
+		err: Error,
 	) {
 		physical_device.features = self.criteria.required_features
-		// physical_device.extended_features_chain = self.criteria.extended_features_chain
+		// physical_device.extended_features_chain = make(
+		// 	[dynamic]Generic_Feature,
+		// 	len(self.criteria.extended_features_chain),
+		// ) or_return
+		// copy(physical_device.extended_features_chain[:], self.criteria.extended_features_chain[:])
 		portability_ext_available := false
 
 		if self.criteria.enable_portability_subset {
@@ -216,12 +223,18 @@ selector_select_impl :: proc(
 		}
 
 		append(&physical_device.extensions_to_enable, ..self.criteria.required_extensions[:])
+
+		return
 	}
 
 	// if this option is set, always return only the first physical device found
 	if self.criteria.use_first_gpu_unconditionally && physical_device_count > 0 {
-		physical_device := selector_populate_device_details(self, vk_physical_devices[0]) or_return
-		fill_out_phys_dev_with_criteria(self, physical_device)
+		physical_device := selector_populate_device_details(
+			self,
+			vk_physical_devices[0],
+			&self.criteria.extended_features_chain,
+		) or_return
+		fill_out_phys_dev_with_criteria(self, physical_device) or_return
 
 		resize(&physical_devices, 1)
 		physical_devices[0] = physical_device
@@ -259,11 +272,15 @@ selector_select_impl :: proc(
 
 	// Populate their details and check their suitability
 	for vk_pd in vk_physical_devices {
-		pd := selector_populate_device_details(self, vk_pd) or_return
+		pd := selector_populate_device_details(
+			self,
+			vk_pd,
+			&self.criteria.extended_features_chain,
+		) or_return
 		pd.suitable = device_selector_is_device_suitable(self, pd) or_return
 
 		if pd.suitable != .No {
-			fill_out_phys_dev_with_criteria(self, pd)
+			fill_out_phys_dev_with_criteria(self, pd) or_return
 
 			score := rate_device_priority(pd)
 
@@ -352,6 +369,7 @@ selector_select_impl :: proc(
 selector_populate_device_details :: proc(
 	self: ^Physical_Device_Selector,
 	vk_physical_device: vk.PhysicalDevice,
+	src_extended_features_chain: ^[dynamic]Generic_Feature,
 ) -> (
 	pd: ^Physical_Device,
 	err: Error,
@@ -416,6 +434,36 @@ selector_populate_device_details :: proc(
 	// Same value as the non-KHR version
 	pd.features2.sType = .PHYSICAL_DEVICE_FEATURES_2
 	pd.properties2_ext_enabled = self.instance_info.properties2_ext_enabled
+
+	instance_is_1_1 := self.instance_info.version >= vk.API_VERSION_1_1
+
+	if len(src_extended_features_chain) > 0 &&
+	   (instance_is_1_1 || self.instance_info.properties2_ext_enabled) {
+		clear(&pd.extended_features_chain)
+		append(&pd.extended_features_chain, ..src_extended_features_chain[:])
+
+		// prev: ^Generic_Feature = nil
+
+		// for &extension in pd.extended_features_chain {
+		// 	if prev != nil {
+		// 		prev.pNext = &extension
+		// 	}
+		// 	prev = &extension
+		// }
+
+		local_features := vk.PhysicalDeviceFeatures2 {
+			// KHR is same as core here
+			sType = .PHYSICAL_DEVICE_FEATURES_2,
+			pNext = &pd.extended_features_chain[0].p_next,
+		}
+
+		// Use KHR function if not able to use the core function
+		if (instance_is_1_1) {
+			vk.GetPhysicalDeviceFeatures2(vk_physical_device, &local_features)
+		} else {
+			vk.GetPhysicalDeviceFeatures2KHR(vk_physical_device, &local_features)
+		}
+	}
 
 	return
 }
@@ -572,7 +620,12 @@ device_selector_is_device_suitable :: proc(
 		suitable = .Partial
 	}
 
-	if !check_device_features_support(pd.features, self.criteria.required_features) {
+	if !check_device_features_support(
+		pd.features,
+		self.criteria.required_features,
+		&pd.extended_features_chain,
+		&self.criteria.extended_features_chain,
+	) {
 		log.warnf(
 			"Physical device [%s] is missing required features support, ignoring...",
 			pd.name,
@@ -707,13 +760,10 @@ selector_set_required_features :: proc(
 // Require a physical device which supports a specific set of general/extension features.
 // If this function is used, the user should not put their own `vk.PhysicalDeviceFeatures2` in
 // the `pNext` chain of `vk.DeviceCreateInfo`.
-selector_add_required_extension_features :: proc(
-	self: ^Physical_Device_Selector,
-	$T: typeid,
-	features: T,
-) {
-	// TODO.
-	unimplemented()
+selector_add_required_extension_features :: proc(self: ^Physical_Device_Selector, feature: $T) {
+	feature := feature
+	generic := create_generic_features(&feature)
+	append(&self.criteria.extended_features_chain, generic)
 }
 
 // Require a physical device which supports the features in VkPhysicalDeviceVulkan11Features.
@@ -722,10 +772,9 @@ selector_set_required_features_11 :: proc(
 	self: ^Physical_Device_Selector,
 	features_11: vk.PhysicalDeviceVulkan11Features,
 ) {
-	unimplemented()
-	// features_11 := features_11
-	// features_11.sType = .PHYSICAL_DEVICE_VULKAN_1_1_FEATURES
-	// selector_add_required_extension_features(self, vk.PhysicalDeviceVulkan11Features, features_11)
+	features_11 := features_11
+	features_11.sType = .PHYSICAL_DEVICE_VULKAN_1_1_FEATURES
+	selector_add_required_extension_features(self, features_11)
 }
 
 // Require a physical device which supports the features in VkPhysicalDeviceVulkan12Features.
@@ -734,10 +783,9 @@ selector_set_required_features_12 :: proc(
 	self: ^Physical_Device_Selector,
 	features_12: vk.PhysicalDeviceVulkan12Features,
 ) {
-	unimplemented()
-	// features_12 := features_12
-	// features_12.sType = .PHYSICAL_DEVICE_VULKAN_1_2_FEATURES
-	// selector_add_required_extension_features(self, vk.PhysicalDeviceVulkan12Features, features_12)
+	features_12 := features_12
+	features_12.sType = .PHYSICAL_DEVICE_VULKAN_1_2_FEATURES
+	selector_add_required_extension_features(self, features_12)
 }
 
 // Require a physical device which supports the features in VkPhysicalDeviceVulkan13Features.
@@ -746,10 +794,9 @@ selector_set_required_features_13 :: proc(
 	self: ^Physical_Device_Selector,
 	features_13: vk.PhysicalDeviceVulkan13Features,
 ) {
-	unimplemented()
-	// features_13 := features_13
-	// features_13.sType = .PHYSICAL_DEVICE_VULKAN_1_3_FEATURES
-	// selector_add_required_extension_features(self, vk.PhysicalDeviceVulkan13Features, features_13)
+	features_13 := features_13
+	features_13.sType = .PHYSICAL_DEVICE_VULKAN_1_3_FEATURES
+	selector_add_required_extension_features(self, features_13)
 }
 
 // Used when surface creation happens after physical device selection.
@@ -766,4 +813,32 @@ selector_select_first_device_unconditionally :: proc(
 	unconditionally: bool = true,
 ) {
 	self.criteria.use_first_gpu_unconditionally = unconditionally
+}
+
+selector_check_device_extension_feature_support :: proc(
+	self: ^Physical_Device_Selector,
+	physical_device: ^Physical_Device,
+	feature: $T,
+) -> (
+	supported: T,
+) {
+	feature := feature
+	generic := create_generic_features(&feature)
+	supported = T{}
+
+	instance_is_1_1 := self.instance_info.version >= vk.API_VERSION_1_1
+
+	local_features := vk.PhysicalDeviceFeatures2 {
+		// KHR is same as core here
+		sType = .PHYSICAL_DEVICE_FEATURES_2,
+		pNext = &supported,
+	}
+
+	if (instance_is_1_1) {
+		vk.GetPhysicalDeviceFeatures2(physical_device.ptr, &local_features)
+	} else {
+		vk.GetPhysicalDeviceFeatures2KHR(physical_device.ptr, &local_features)
+	}
+
+	return
 }

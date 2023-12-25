@@ -3,8 +3,6 @@ package vk_bootstrap
 // Vendor
 import vk "vendor:vulkan"
 
-FEATURES_FIELDS_CAPACITY :: 256
-
 Physical_Device_Suitable :: enum {
 	Yes,
 	Partial,
@@ -22,7 +20,7 @@ Physical_Device :: struct {
 	extensions_to_enable:         [dynamic]cstring,
 	available_extensions:         []vk.ExtensionProperties,
 	queue_families:               []vk.QueueFamilyProperties,
-	// std::vector<detail::GenericFeaturesPNextNode> extended_features_chain;
+	extended_features_chain:      [dynamic]Generic_Feature,
 	features2:                    vk.PhysicalDeviceFeatures2,
 	defer_surface_initialization: bool,
 	properties2_ext_enabled:      bool,
@@ -35,14 +33,15 @@ destroy_physical_device :: proc(self: ^Physical_Device) {
 	delete(self.extensions_to_enable)
 	delete(self.available_extensions)
 	delete(self.queue_families)
+	delete(self.extended_features_chain)
 	if self.name != "" {
 		delete(self.name)
 	}
 }
 
-init_physical_device :: proc() -> (pd: Physical_Device, err: Error) {
-	return
-}
+// init_physical_device :: proc() -> (pd: Physical_Device, err: Error) {
+// 	return
+// }
 
 // Has a queue family that supports compute operations but not graphics nor transfer.
 physical_device_has_dedicated_compute_queue :: proc(self: ^Physical_Device) -> (result: bool) {

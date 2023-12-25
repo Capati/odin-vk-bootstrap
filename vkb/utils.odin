@@ -23,5 +23,3 @@ VK_VERSION_MINOR :: proc(version: u32) -> u32 {
 VK_VERSION_PATCH :: proc(version: u32) -> u32 {
 	return version & 0xFFF
 }
-
-Generic_Features_P_Next_Node :: struct {}
