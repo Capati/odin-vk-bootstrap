@@ -558,14 +558,11 @@ device_selector_is_device_suitable :: proc(
 
 	runtime.DEFAULT_TEMP_ALLOCATOR_TEMP_GUARD()
 
-	required_extensions_supported := check_device_extension_support(
+	if !check_device_extension_support(
 		&pd.available_extensions,
 		self.criteria.required_extensions[:],
-		context.temp_allocator,
-	) or_return
-
-	if len(required_extensions_supported) != len(self.criteria.required_extensions) {
-		log.warnf("Physical device [%s] is missing required extensions, ignoring...", pd.name)
+	) {
+		log.warnf("[%s] is missing required extensions, ignoring...", pd.name)
 		return .No, nil
 	}
 

@@ -1,34 +1,34 @@
 package vk_bootstrap
 
+// Core
+import "core:log"
+
 // Vendor
 import vk "vendor:vulkan"
 
 @(private)
 check_device_extension_support :: proc(
 	available_extensions: ^[]vk.ExtensionProperties,
-	desired_extensions: []cstring,
-	allocator := context.allocator,
+	required_extensions: []cstring,
 ) -> (
-	[]cstring,
-	Error,
+	supported: bool,
 ) {
-	if len(desired_extensions) == 0 {
-		return {}, nil
+	supported = true
+
+	if len(required_extensions) == 0 || len(available_extensions) == 0 {
+		return true
 	}
 
-	extensions_to_enable, make_err := make([dynamic]cstring, allocator)
-	if make_err != nil do return {}, make_err
-
 	for avail_ext in available_extensions {
-		for req_ext in desired_extensions {
-			if cstring(&avail_ext.extensionName[0]) == req_ext {
-				append(&extensions_to_enable, req_ext)
-				break
+		for req_ext in required_extensions {
+			if cstring(&avail_ext.extensionName[0]) != req_ext {
+				log.warnf("Required extension [%s] is not available", req_ext)
+				supported = false
 			}
 		}
 	}
 
-	return extensions_to_enable[:], nil
+	return
 }
 
 check_device_features_support :: proc(
