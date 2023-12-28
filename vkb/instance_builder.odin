@@ -93,20 +93,20 @@ build_instance :: proc(self: ^Instance_Builder) -> (instance: ^Instance, err: Er
 		   self.required_api_version > vk.API_VERSION_1_0) {
 
 		if res := vk.EnumerateInstanceVersion(&instance_version); res != .SUCCESS {
-			return instance, .Vulkan_Version_Unavailable
+			return nil, .Vulkan_Version_Unavailable
 		}
 
 		if (instance_version < self.minimum_instance_version ||
 			   (self.minimum_instance_version == 0 &&
 					   instance_version < self.required_api_version)) {
 			if VK_VERSION_MINOR(self.required_api_version) == 3 {
-				return instance, .Vulkan_Version_1_3_Unavailable
+				return nil, .Vulkan_Version_1_3_Unavailable
 			} else if VK_VERSION_MINOR(self.required_api_version) == 2 {
-				return instance, .Vulkan_Version_1_2_Unavailable
+				return nil, .Vulkan_Version_1_2_Unavailable
 			} else if (VK_VERSION_MINOR(self.required_api_version) == 1) {
-				return instance, .Vulkan_Version_1_1_Unavailable
+				return nil, .Vulkan_Version_1_1_Unavailable
 			} else {
-				return instance, .Vulkan_Version_Unavailable
+				return nil, .Vulkan_Version_Unavailable
 			}
 		}
 	}
@@ -242,12 +242,12 @@ build_instance :: proc(self: ^Instance_Builder) -> (instance: ^Instance, err: Er
 				&self.info.available_extensions,
 			)
 		} else {
-			return instance, .Windowing_Extensions_Not_Present
+			return nil, .Windowing_Extensions_Not_Present
 		}
 
 		if !khr_surface_added || !added_window_exts {
 			log.fatalf("Required windowing extensions not present!")
-			return instance, .Windowing_Extensions_Not_Present
+			return nil, .Windowing_Extensions_Not_Present
 		}
 	}
 
@@ -257,7 +257,7 @@ build_instance :: proc(self: ^Instance_Builder) -> (instance: ^Instance, err: Er
 	)
 
 	if !required_extensions_supported {
-		return instance, .Requested_Extensions_Not_Present
+		return nil, .Requested_Extensions_Not_Present
 	}
 
 	layers := make([dynamic]cstring, context.temp_allocator) or_return
@@ -272,7 +272,7 @@ build_instance :: proc(self: ^Instance_Builder) -> (instance: ^Instance, err: Er
 	required_layers_supported := check_layers_supported(&self.info.available_layers, &layers)
 
 	if !required_layers_supported {
-		return instance, .Requested_Layers_Not_Present
+		return nil, .Requested_Layers_Not_Present
 	}
 
 	p_next_chain := make([dynamic]^vk.BaseOutStructure, context.temp_allocator) or_return
@@ -322,6 +322,16 @@ build_instance :: proc(self: ^Instance_Builder) -> (instance: ^Instance, err: Er
 		if portability_enumeration_support {
 			instance_create_info.flags += {.ENUMERATE_PORTABILITY_KHR}
 		}
+	}
+
+	alloc_err: mem.Allocator_Error
+	instance, alloc_err = new(Instance)
+	if alloc_err != nil {
+		log.errorf("Failed to allocate an instance object: [%v]", alloc_err)
+		return nil, alloc_err
+	}
+	defer if err != nil {
+		free(instance);instance = nil
 	}
 
 	if res := vk.CreateInstance(&instance_create_info, self.allocation_callbacks, &instance.ptr);
