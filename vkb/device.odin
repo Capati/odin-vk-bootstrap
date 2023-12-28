@@ -61,25 +61,29 @@ device_get_queue_index :: proc(self: ^Device, type: Queue_Type) -> (index: u32, 
 			log.error("Transfer queue index unavailable.")
 			return vk.QUEUE_FAMILY_IGNORED, .Transfer_Unavailable
 		}
-	case:
-		return vk.QUEUE_FAMILY_IGNORED, .Invalid_Queue_Family_Index
 	}
 
 	return
 }
 
-device_get_dedicated_queue_index :: proc(this: ^Device, type: Queue_Type) -> (u32, Queue_Error) {
-	index := vk.QUEUE_FAMILY_IGNORED
+device_get_dedicated_queue_index :: proc(
+	self: ^Device,
+	type: Queue_Type,
+) -> (
+	index: u32,
+	err: Error,
+) {
+	index = vk.QUEUE_FAMILY_IGNORED
 
 	#partial switch type {
 	case .Compute:
-		index = get_dedicated_queue_index(this.queue_families, {.COMPUTE}, {.TRANSFER})
+		index = get_dedicated_queue_index(self.queue_families, {.COMPUTE}, {.TRANSFER})
 		if index == vk.QUEUE_FAMILY_IGNORED {
 			log.error("Dedicated Compute queue index unavailable.")
 			return vk.QUEUE_FAMILY_IGNORED, .Compute_Unavailable
 		}
 	case .Transfer:
-		index = get_dedicated_queue_index(this.queue_families, {.TRANSFER}, {.COMPUTE})
+		index = get_dedicated_queue_index(self.queue_families, {.TRANSFER}, {.COMPUTE})
 		if index == vk.QUEUE_FAMILY_IGNORED {
 			log.error("Dedicated Transfer queue index unavailable.")
 			return vk.QUEUE_FAMILY_IGNORED, .Transfer_Unavailable
@@ -88,25 +92,23 @@ device_get_dedicated_queue_index :: proc(this: ^Device, type: Queue_Type) -> (u3
 		return vk.QUEUE_FAMILY_IGNORED, .Invalid_Queue_Family_Index
 	}
 
-	return index, .None
+	return
 }
 
-// device_get_queue :: proc(self: ^Device, type: Queue_Type) -> (queue: Queue, err: Error) {
-// 	index := device_get_queue_index(self, type) or_return
+device_get_queue :: proc(self: ^Device, type: Queue_Type) -> (queue: vk.Queue, err: Error) {
+	index := device_get_queue_index(self, type) or_return
+	vk.GetDeviceQueue(self.ptr, index, 0, &queue)
+	return
+}
 
-// 	out_queue := init_queue(this, index, queue_families[index], 0)
-
-// 	return out_queue, .None
-// }
-
-// device_get_dedicated_queue :: proc(self: ^Device, type: Queue_Type) -> (vk.Queue, Queue_Error) {
-// 	index, index_err := this->get_dedicated_queue_index(type)
-
-// 	if index_err != .None {
-// 		return nil, index_err
-// 	}
-
-// 	out_queue: vk.Queue
-// 	vk.GetDeviceQueue(handle, index, 0, &out_queue)
-// 	return out_queue, .None
-// }
+device_get_dedicated_queue :: proc(
+	self: ^Device,
+	type: Queue_Type,
+) -> (
+	queue: vk.Queue,
+	err: Error,
+) {
+	index := device_get_dedicated_queue_index(self, type) or_return
+	vk.GetDeviceQueue(self.ptr, index, 0, &queue)
+	return
+}
