@@ -302,23 +302,24 @@ selector_select_impl :: proc(
 		}
 	}
 
-	if pd_by_priority.len == 0 {
+	pd_total := int(pd_by_priority.len)
+
+	if pd_total == 0 {
 		log.error("No suitable device found")
 		return physical_devices, .No_Suitable_Device
 	}
 
-	pd_total := int(pd_by_priority.len)
-
 	resize(&physical_devices, pd_total)
+
+	if pd_total == 1 {
+		physical_devices[0] = queue.get(&pd_by_priority, 0)
+		return
+	}
 
 	// TODO(Capati): Why append does not work?
 	for i in 0 ..< pd_total {
-		physical_devices[i] = queue.pop_front(&pd_by_priority)
-		// append(&physical_devices, queue.pop_front(&pd_by_priority))
-	}
-
-	if len(physical_devices) == 1 {
-		return
+		physical_devices[i] = queue.get(&pd_by_priority, i)
+		// append(&physical_devices, queue.get(&pd_by_priority, i))
 	}
 
 	// Sort into fully and partially suitable devices
