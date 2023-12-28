@@ -37,7 +37,9 @@ destroy_device_builder :: proc(self: ^Device_Builder) {
 	delete(self.p_next_chain)
 }
 
-device_builder_build :: proc(self: ^Device_Builder) -> (device: ^Device, err: Error) {
+// Create a `Device`. Return an error if it failed.
+@(require_results)
+build_device :: proc(self: ^Device_Builder) -> (device: ^Device, err: Error) {
 	log.info("Requesting a logical device...")
 
 	device = new(Device)

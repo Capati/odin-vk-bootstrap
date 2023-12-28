@@ -2,13 +2,13 @@ package vk_bootstrap
 
 // Core
 import "core:log"
+import "core:mem"
 import "core:runtime"
 import "core:strings"
 
 // Vendor
 import vk "vendor:vulkan"
 
-@(private)
 Instance_Builder :: struct {
 	// vk.ApplicationInfo
 	app_name:                     string,
@@ -79,12 +79,6 @@ destroy_instance_builder :: proc(self: ^Instance_Builder) {
 build_instance :: proc(self: ^Instance_Builder) -> (instance: ^Instance, err: Error) {
 	log.info("Building instance...")
 
-	instance = new(Instance)
-	defer if err != nil {
-		free(instance)
-		instance = nil
-	}
-
 	// Current supported instance version
 	instance_version := cast(u32)vk.API_VERSION_1_0
 
@@ -125,19 +119,16 @@ build_instance :: proc(self: ^Instance_Builder) -> (instance: ^Instance, err: Er
 
 	runtime.DEFAULT_TEMP_ALLOCATOR_TEMP_GUARD()
 
-	app_info := vk.ApplicationInfo {
-		pApplicationName = "",
-		pEngineName      = "",
-	}
+	app_info := vk.ApplicationInfo{}
 	app_info.sType = .APPLICATION_INFO
 	app_info.pNext = nil
-	if self.app_name != "" {
-		app_info.pApplicationName = strings.clone_to_cstring(self.app_name, context.temp_allocator)
-	}
+	app_info.pApplicationName =
+		self.app_name != "" ? strings.clone_to_cstring(self.app_name, context.temp_allocator) : ""
 	app_info.applicationVersion = self.application_version
-	if self.engine_name != "" {
-		app_info.pEngineName = strings.clone_to_cstring(self.engine_name, context.temp_allocator)
-	}
+	app_info.pEngineName =
+		self.engine_name != "" \
+		? strings.clone_to_cstring(self.engine_name, context.temp_allocator) \
+		: ""
 	app_info.engineVersion = self.engine_version
 	app_info.apiVersion = api_version
 
@@ -161,6 +152,9 @@ build_instance :: proc(self: ^Instance_Builder) -> (instance: ^Instance, err: Er
 		}
 	}
 
+	// Note that support for the vk.KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME is only
+	// required for Vulkan version 1.0.
+	// https://vulkan.lunarg.com/doc/sdk/1.3.268.1/mac/getting_started.html
 	properties2_ext_enabled :=
 		api_version < vk.API_VERSION_1_1 &&
 		check_extension_supported(
@@ -169,11 +163,14 @@ build_instance :: proc(self: ^Instance_Builder) -> (instance: ^Instance, err: Er
 		)
 
 	if (properties2_ext_enabled) {
-		log.infof("Extension [%s] enabled", vk.KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME)
+		log.infof(
+			"Enforcing required extension [%s] for Vulkan 1.0",
+			vk.KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME,
+		)
 		append(&extensions, vk.KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME)
 	}
 
-	when #config(VK_KHR_portability_enumeration, false) {
+	when ODIN_OS == .Darwin || #config(VK_KHR_portability_enumeration, false) {
 		portability_enumeration_support := check_extension_supported(
 			&self.info.available_extensions,
 			vk.KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME,
@@ -202,10 +199,17 @@ build_instance :: proc(self: ^Instance_Builder) -> (instance: ^Instance, err: Er
 			return false
 		}
 
-		khr_surface_added := check_add_window_ext(
-			vk.KHR_SURFACE_EXTENSION_NAME,
-			&extensions,
+		if !check_add_window_ext(
+			   vk.KHR_SURFACE_EXTENSION_NAME,
+			   &extensions,
 			   &self.info.available_extensions,
+		   ) {
+			log.fatalf(
+				"Required base windowing extension [%s] not present!",
+				vk.KHR_SURFACE_EXTENSION_NAME,
+			)
+			return nil, .Windowing_Extensions_Not_Present
+		}
 
 		when ODIN_OS == .Windows {
 			added_window_exts := check_add_window_ext(
@@ -245,7 +249,7 @@ build_instance :: proc(self: ^Instance_Builder) -> (instance: ^Instance, err: Er
 			return nil, .Windowing_Extensions_Not_Present
 		}
 
-		if !khr_surface_added || !added_window_exts {
+		if !added_window_exts {
 			log.fatalf("Required windowing extensions not present!")
 			return nil, .Windowing_Extensions_Not_Present
 		}
@@ -318,7 +322,7 @@ build_instance :: proc(self: ^Instance_Builder) -> (instance: ^Instance, err: Er
 	instance_create_info.enabledLayerCount = u32(len(layers))
 	instance_create_info.ppEnabledLayerNames = raw_data(layers)
 
-	when #config(VK_KHR_portability_enumeration, false) {
+	when ODIN_OS == .Darwin || #config(VK_KHR_portability_enumeration, false) {
 		if portability_enumeration_support {
 			instance_create_info.flags += {.ENUMERATE_PORTABILITY_KHR}
 		}
@@ -359,7 +363,7 @@ build_instance :: proc(self: ^Instance_Builder) -> (instance: ^Instance, err: Er
 			self.allocation_callbacks,
 			&instance.debug_messenger,
 		); res != .SUCCESS {
-			log.errorf("Failed to create debug messenger: %v", res)
+			log.fatalf("Failed to create debug messenger: %v", res)
 			return instance, .Failed_Create_Debug_Messenger
 		}
 	}

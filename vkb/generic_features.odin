@@ -30,7 +30,6 @@ create_generic_features :: proc(features: ^$T) -> (v: Generic_Feature) {
 }
 
 // Check if all `requested` extension features bits is available.
-// The `supported` is filled with `vk.GetPhysicalDeviceFeatures2` from the `requested`.
 generic_features_match :: proc(
 	requested: ^Generic_Feature,
 	supported: ^Generic_Feature,

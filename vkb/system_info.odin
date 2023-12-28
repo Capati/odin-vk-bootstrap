@@ -139,6 +139,11 @@ get_system_info :: proc() -> (info: System_Info, err: Error) {
 	return
 }
 
+destroy_system_info :: proc(self: ^System_Info) {
+	delete(self.available_layers)
+	delete(self.available_extensions)
+}
+
 // Returns true if a layer is available.
 is_layer_available :: proc(self: ^System_Info, layer_name: cstring) -> bool {
 	if layer_name == nil do return false
@@ -149,11 +154,6 @@ is_layer_available :: proc(self: ^System_Info, layer_name: cstring) -> bool {
 is_extension_available :: proc(self: ^System_Info, ext_name: cstring) -> bool {
 	if ext_name == nil do return false
 	return check_extension_supported(&self.available_extensions, ext_name)
-}
-
-destroy_system_info :: proc(self: ^System_Info) {
-	delete(self.available_layers)
-	delete(self.available_extensions)
 }
 
 @(private)
