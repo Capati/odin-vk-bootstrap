@@ -105,7 +105,8 @@ Device_Selection_Mode :: enum {
 
 // Return the first device which is suitable.
 // Use the `selection` parameter to configure if partially.
-selector_select :: proc(
+@(require_results)
+select_physical_device :: proc(
 	self: ^Physical_Device_Selector,
 	selection: Device_Selection_Mode = .Partially_And_Fully_Suitable,
 ) -> (
