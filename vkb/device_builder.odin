@@ -2,6 +2,7 @@ package vk_bootstrap
 
 // Core
 import "core:log"
+import "core:mem"
 import "core:runtime"
 import "core:slice"
 
@@ -41,9 +42,6 @@ destroy_device_builder :: proc(self: ^Device_Builder) {
 @(require_results)
 build_device :: proc(self: ^Device_Builder) -> (device: ^Device, err: Error) {
 	log.info("Requesting a logical device...")
-
-	device = new(Device)
-	defer if err != nil do free(device)
 
 	runtime.DEFAULT_TEMP_ALLOCATOR_TEMP_GUARD()
 
@@ -163,6 +161,16 @@ build_device :: proc(self: ^Device_Builder) -> (device: ^Device, err: Error) {
 	device_create_info.enabledExtensionCount = u32(len(extensions_to_enable))
 	device_create_info.ppEnabledExtensionNames = raw_data(extensions_to_enable[:])
 
+	alloc_err: mem.Allocator_Error
+	device, alloc_err = new(Device)
+	if alloc_err != nil {
+		log.errorf("Failed to allocate a device object: [%v]", alloc_err)
+		return nil, alloc_err
+	}
+	defer if err != nil {
+		free(device);device = nil
+	}
+
 	if res := vk.CreateDevice(
 		self.physical_device.ptr,
 		&device_create_info,
@@ -170,7 +178,7 @@ build_device :: proc(self: ^Device_Builder) -> (device: ^Device, err: Error) {
 		&device.ptr,
 	); res != .SUCCESS {
 		log.fatalf("Failed to create logical device: [%v]", res)
-		return nil, .Failed_Create_Device
+		return device, .Failed_Create_Device
 	}
 
 	device.physical_device = self.physical_device
