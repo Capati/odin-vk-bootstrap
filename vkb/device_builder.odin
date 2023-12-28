@@ -23,7 +23,12 @@ Custom_Queue_Description :: struct {
 	priorities: []f32,
 }
 
-init_device_builder :: proc(physical_device: ^Physical_Device) -> (builder: Device_Builder) {
+init_device_builder :: proc(
+	physical_device: ^Physical_Device,
+) -> (
+	builder: Device_Builder,
+	err: Error,
+) {
 	builder.physical_device = physical_device
 	return
 }
