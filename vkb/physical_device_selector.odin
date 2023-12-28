@@ -375,33 +375,20 @@ selector_populate_device_details :: proc(
 	pd: ^Physical_Device,
 	err: Error,
 ) {
-	pd = new(Physical_Device)
-	defer if err != nil do free(pd)
+	alloc_err: mem.Allocator_Error
+	pd, alloc_err = new(Physical_Device)
+	if alloc_err != nil {
+		log.errorf("Failed to allocate a physical device object: [%v]", alloc_err)
+		return nil, alloc_err
+	}
+	defer if err != nil {
+		free(pd);pd = nil
+	}
 
 	pd.ptr = vk_physical_device
 	pd.surface = self.instance_info.surface
 	pd.defer_surface_initialization = self.criteria.defer_surface_initialization
 	pd.instance_version = self.instance_info.version
-
-	// Get the device queue families
-	queue_family_count: u32
-	vk.GetPhysicalDeviceQueueFamilyProperties(vk_physical_device, &queue_family_count, nil)
-
-	if queue_family_count > 0 {
-		pd.queue_families = make([]vk.QueueFamilyProperties, int(queue_family_count)) or_return
-
-		vk.GetPhysicalDeviceQueueFamilyProperties(
-			vk_physical_device,
-			&queue_family_count,
-			raw_data(pd.queue_families),
-		)
-	}
-	defer if err != nil do delete(pd.queue_families)
-
-	// Get device features and properties
-	vk.GetPhysicalDeviceFeatures(vk_physical_device, &pd.features)
-	vk.GetPhysicalDeviceProperties(vk_physical_device, &pd.properties)
-	vk.GetPhysicalDeviceMemoryProperties(vk_physical_device, &pd.memory_properties)
 
 	// Set device name
 	pd_name := cstring(&pd.properties.deviceName[0])
@@ -409,15 +396,42 @@ selector_populate_device_details :: proc(
 		pd.name = strings.clone_from(pd.properties.deviceName[:])
 	}
 
+	// Get the device queue families
+	queue_family_count: u32
+	vk.GetPhysicalDeviceQueueFamilyProperties(vk_physical_device, &queue_family_count, nil)
+
+	if queue_family_count == 0 {
+		log.errorf("[%s] No queue family properties found", pd.name)
+		return pd, .Queue_Family_Properties_Empty
+	}
+
+		pd.queue_families = make([]vk.QueueFamilyProperties, int(queue_family_count)) or_return
+
+		vk.GetPhysicalDeviceQueueFamilyProperties(
+			vk_physical_device,
+			&queue_family_count,
+			raw_data(pd.queue_families),
+		)
+	defer if err != nil do delete(pd.queue_families)
+
+	// Get device features and properties
+	vk.GetPhysicalDeviceFeatures(vk_physical_device, &pd.features)
+	vk.GetPhysicalDeviceProperties(vk_physical_device, &pd.properties)
+	vk.GetPhysicalDeviceMemoryProperties(vk_physical_device, &pd.memory_properties)
+
 	// Get supported device extensions
 	property_count: u32
 	if res := vk.EnumerateDeviceExtensionProperties(vk_physical_device, nil, &property_count, nil);
 	   res != .SUCCESS {
 		log.errorf("Failed to enumerate device extensions properties count: [%s]", res)
-		return nil, .Failed_Enumerate_Physical_Device_Extensions
+		return pd, .Failed_Enumerate_Physical_Device_Extensions
 	}
 
-	if property_count > 0 {
+	if property_count == 0 {
+		log.errorf("[%s] No device extension properties found", pd.name)
+		return pd, .Failed_Enumerate_Physical_Device_Extensions
+	}
+
 		pd.available_extensions = make([]vk.ExtensionProperties, property_count)
 
 		if res := vk.EnumerateDeviceExtensionProperties(
@@ -426,9 +440,8 @@ selector_populate_device_details :: proc(
 			&property_count,
 			raw_data(pd.available_extensions),
 		); res != .SUCCESS {
-			log.errorf("ERROR: Failed to enumerate device extensions properties: [%s]", res)
-			return nil, .Failed_Enumerate_Physical_Device_Extensions
-		}
+		log.errorf("Failed to enumerate device extensions properties: [%s]", res)
+		return pd, .Failed_Enumerate_Physical_Device_Extensions
 	}
 	defer if err != nil do delete(pd.available_extensions)
 
@@ -440,17 +453,9 @@ selector_populate_device_details :: proc(
 
 	if len(src_extended_features_chain) > 0 &&
 	   (instance_is_1_1 || self.instance_info.properties2_ext_enabled) {
+		// The required supported will be filled from the requested
 		clear(&pd.extended_features_chain)
 		append(&pd.extended_features_chain, ..src_extended_features_chain[:])
-
-		// prev: ^Generic_Feature = nil
-
-		// for &extension in pd.extended_features_chain {
-		// 	if prev != nil {
-		// 		prev.pNext = &extension
-		// 	}
-		// 	prev = &extension
-		// }
 
 		local_features := vk.PhysicalDeviceFeatures2 {
 			// KHR is same as core here
