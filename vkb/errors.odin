@@ -37,6 +37,7 @@ Queue_Error :: enum {
 	Transfer_Unavailable,
 	Queue_Index_Out_Of_Range,
 	Invalid_Queue_Family_Index,
+	Queue_Family_Properties_Empty,
 }
 
 @(private)
@@ -65,6 +66,16 @@ System_Info_Error :: enum {
 	Instance_Extension_Error,
 }
 
+@(private)
+Surface_Support_Error :: enum {
+	None,
+	Surface_Handle_Null,
+	Failed_Get_Surface_Capabilities,
+	Failed_Enumerate_Surface_Formats,
+	Failed_Enumerate_Present_Modes,
+	No_Suitable_Desired_Format,
+}
+
 Error :: union #shared_nil {
 	Instance_Error,
 	Physical_Device_Error,
@@ -72,5 +83,6 @@ Error :: union #shared_nil {
 	Device_Error,
 	Swapchain_Error,
 	System_Info_Error,
+	Surface_Support_Error,
 	mem.Allocator_Error,
 }
