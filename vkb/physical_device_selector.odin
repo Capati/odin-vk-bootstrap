@@ -406,13 +406,13 @@ selector_populate_device_details :: proc(
 		return pd, .Queue_Family_Properties_Empty
 	}
 
-		pd.queue_families = make([]vk.QueueFamilyProperties, int(queue_family_count)) or_return
+	pd.queue_families = make([]vk.QueueFamilyProperties, int(queue_family_count)) or_return
 
-		vk.GetPhysicalDeviceQueueFamilyProperties(
-			vk_physical_device,
-			&queue_family_count,
-			raw_data(pd.queue_families),
-		)
+	vk.GetPhysicalDeviceQueueFamilyProperties(
+		vk_physical_device,
+		&queue_family_count,
+		raw_data(pd.queue_families),
+	)
 	defer if err != nil do delete(pd.queue_families)
 
 	// Get device features and properties
@@ -433,14 +433,14 @@ selector_populate_device_details :: proc(
 		return pd, .Failed_Enumerate_Physical_Device_Extensions
 	}
 
-		pd.available_extensions = make([]vk.ExtensionProperties, property_count)
+	pd.available_extensions = make([]vk.ExtensionProperties, property_count)
 
-		if res := vk.EnumerateDeviceExtensionProperties(
-			vk_physical_device,
-			nil,
-			&property_count,
-			raw_data(pd.available_extensions),
-		); res != .SUCCESS {
+	if res := vk.EnumerateDeviceExtensionProperties(
+		vk_physical_device,
+		nil,
+		&property_count,
+		raw_data(pd.available_extensions),
+	); res != .SUCCESS {
 		log.errorf("Failed to enumerate device extensions properties: [%s]", res)
 		return pd, .Failed_Enumerate_Physical_Device_Extensions
 	}
