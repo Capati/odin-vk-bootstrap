@@ -391,6 +391,9 @@ selector_populate_device_details :: proc(
 	pd.defer_surface_initialization = self.criteria.defer_surface_initialization
 	pd.instance_version = self.instance_info.version
 
+	// Get device properties
+	vk.GetPhysicalDeviceProperties(vk_physical_device, &pd.properties)
+
 	// Set device name
 	pd_name := cstring(&pd.properties.deviceName[0])
 	if pd_name != nil && pd_name != "" {
@@ -415,9 +418,8 @@ selector_populate_device_details :: proc(
 	)
 	defer if err != nil do delete(pd.queue_families)
 
-	// Get device features and properties
+	// Get device features and memory properties
 	vk.GetPhysicalDeviceFeatures(vk_physical_device, &pd.features)
-	vk.GetPhysicalDeviceProperties(vk_physical_device, &pd.properties)
 	vk.GetPhysicalDeviceMemoryProperties(vk_physical_device, &pd.memory_properties)
 
 	// Get supported device extensions
