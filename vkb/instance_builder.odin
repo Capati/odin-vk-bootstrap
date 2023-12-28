@@ -42,6 +42,9 @@ Instance_Builder :: struct {
 	enable_validation_layers:     bool,
 	use_debug_messenger:          bool,
 	headless_context:             bool,
+
+	// System information
+	info:                         System_Info,
 }
 
 _logger: log.Logger
@@ -55,6 +58,9 @@ init_instance_builder :: proc() -> (builder: Instance_Builder, err: Error) {
 	builder.debug_message_severity = {.WARNING, .ERROR}
 	builder.debug_message_type = {.GENERAL, .VALIDATION, .PERFORMANCE}
 
+	// Get supported layers and extensions
+	builder.info = get_system_info() or_return
+
 	return
 }
 
@@ -65,6 +71,7 @@ destroy_instance_builder :: proc(self: ^Instance_Builder) {
 	delete(self.disabled_validation_checks)
 	delete(self.enabled_validation_features)
 	delete(self.disabled_validation_features)
+	destroy_system_info(&self.info)
 }
 
 // Create a `VkInstance`. Return an error if it failed.
@@ -137,11 +144,7 @@ build_instance :: proc(self: ^Instance_Builder) -> (instance: ^Instance, err: Er
 	extensions := make([dynamic]cstring, context.temp_allocator) or_return
 	append(&extensions, ..self.extensions[:])
 
-	// Get supported layers and extensions
-	info := get_system_info() or_return
-	defer destroy_system_info(&info)
-
-	if self.use_debug_messenger && !info.debug_utils_available {
+	if self.use_debug_messenger && !self.info.debug_utils_available {
 		log.warnf(
 			"Debug messenger was enabled but the required extension [%s] is not available; disabling...",
 			vk.EXT_DEBUG_UTILS_EXTENSION_NAME,
@@ -161,7 +164,7 @@ build_instance :: proc(self: ^Instance_Builder) -> (instance: ^Instance, err: Er
 	properties2_ext_enabled :=
 		api_version < vk.API_VERSION_1_1 &&
 		check_extension_supported(
-			&info.available_extensions,
+			&self.info.available_extensions,
 			vk.KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME,
 		)
 
@@ -172,7 +175,7 @@ build_instance :: proc(self: ^Instance_Builder) -> (instance: ^Instance, err: Er
 
 	when #config(VK_KHR_portability_enumeration, false) {
 		portability_enumeration_support := check_extension_supported(
-			&info.available_extensions,
+			&self.info.available_extensions,
 			vk.KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME,
 		)
 
@@ -202,27 +205,26 @@ build_instance :: proc(self: ^Instance_Builder) -> (instance: ^Instance, err: Er
 		khr_surface_added := check_add_window_ext(
 			vk.KHR_SURFACE_EXTENSION_NAME,
 			&extensions,
-			&info.available_extensions,
-		)
+			   &self.info.available_extensions,
 
 		when ODIN_OS == .Windows {
 			added_window_exts := check_add_window_ext(
 				vk.KHR_WIN32_SURFACE_EXTENSION_NAME,
 				&extensions,
-				&info.available_extensions,
+				&self.info.available_extensions,
 			)
 		} else when ODIN_OS == .Linux {
 			added_window_exts := check_add_window_ext(
 				"VK_KHR_xcb_surface",
 				&extensions,
-				&info.available_extensions,
+				&self.info.available_extensions,
 			)
 
 			added_window_exts =
 				check_add_window_ext(
 					"VK_KHR_xlib_surface",
 					&extensions,
-					&info.available_extensions,
+					&self.info.available_extensions,
 				) ||
 				added_window_exts
 
@@ -230,14 +232,14 @@ build_instance :: proc(self: ^Instance_Builder) -> (instance: ^Instance, err: Er
 				check_add_window_ext(
 					vk.KHR_WAYLAND_SURFACE_EXTENSION_NAME,
 					&extensions,
-					&info.available_extensions,
+					&self.info.available_extensions,
 				) ||
 				added_window_exts
 		} else when ODIN_OS == .Darwin {
 			added_window_exts := check_add_window_ext(
 				vk.EXT_METAL_SURFACE_EXTENSION_NAME,
 				&extensions,
-				&info.available_extensions,
+				&self.info.available_extensions,
 			)
 		} else {
 			return instance, .Windowing_Extensions_Not_Present
@@ -250,7 +252,7 @@ build_instance :: proc(self: ^Instance_Builder) -> (instance: ^Instance, err: Er
 	}
 
 	required_extensions_supported := check_extensions_supported(
-		&info.available_extensions,
+		&self.info.available_extensions,
 		&extensions,
 	)
 
@@ -262,12 +264,12 @@ build_instance :: proc(self: ^Instance_Builder) -> (instance: ^Instance, err: Er
 	append(&layers, ..self.layers[:])
 
 	if (self.enable_validation_layers ||
-		   (self.request_validation_layers && info.validation_layers_available)) {
+		   (self.request_validation_layers && self.info.validation_layers_available)) {
 		log.infof("Layer [%s] enabled", VALIDATION_LAYER_NAME)
 		append(&layers, VALIDATION_LAYER_NAME)
 	}
 
-	required_layers_supported := check_layers_supported(&info.available_layers, &layers)
+	required_layers_supported := check_layers_supported(&self.info.available_layers, &layers)
 
 	if !required_layers_supported {
 		return instance, .Requested_Layers_Not_Present
