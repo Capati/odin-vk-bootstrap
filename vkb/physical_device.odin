@@ -114,3 +114,34 @@ physical_device_enable_extension_if_present :: proc(
 	}
 	return false
 }
+
+// Get the supported sample counts.
+physical_device_get_supported_sample_counts :: proc(
+	self: ^Physical_Device,
+) -> vk.SampleCountFlags {
+	return(
+		self.properties.limits.framebufferColorSampleCounts &
+		self.properties.limits.framebufferDepthSampleCounts \
+	)
+}
+
+// Get the max supported MSAA.
+physical_device_get_max_msaa :: proc(self: ^Physical_Device) -> vk.SampleCountFlag {
+	supported_sample_counts := physical_device_get_supported_sample_counts(self)
+
+	if ._64 in supported_sample_counts {
+		return ._64
+	} else if ._32 in supported_sample_counts {
+		return ._32
+	} else if ._16 in supported_sample_counts {
+		return ._16
+	} else if ._8 in supported_sample_counts {
+		return ._8
+	} else if ._4 in supported_sample_counts {
+		return ._4
+	} else if ._2 in supported_sample_counts {
+		return ._2
+	}
+
+	return ._1
+}
