@@ -59,27 +59,27 @@
                 "command": "odin",
                 "args": [
                     "build",
-                    "./examples",
+                    "./examples/triangle",
                     "-o:speed",
                     "-disable-assert",
                     "-no-bounds-check",
                     "-target:windows_amd64",
                     "-subsystem:windows",
                     "-define:CHECK_TO_BYTES=false",
-                    "-out:./build/release.exe"
+                    "-out:./examples/build/triangle_release.exe"
                 ]
             },
             "linux": {
                 "command": "odin",
                 "args": [
                     "build",
-                    "./examples",
+                    "./examples/triangle",
                     "-o:speed",
                     "-disable-assert",
                     "-no-bounds-check",
                     "-target:linux_amd64",
                     "-define:CHECK_TO_BYTES=false",
-                    "-out:./build/release"
+                    "-out:./examples/build/triangle_release"
                 ]
             },
             "options": {

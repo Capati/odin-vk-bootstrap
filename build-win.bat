@@ -1,14 +1,14 @@
 @echo off
 
 set "OUTPUT_DIR=examples/build"
-set "EXECUTABLE_NAME=hello_vulkan.exe"
+set "EXECUTABLE_NAME=triangle_debug.exe"
 
 set "type=%~1"
 if "%type%"=="" set type=build
 
 if not exist %OUTPUT_DIR% mkdir %OUTPUT_DIR%
 
-odin build .\examples\hello_vulkan ^
+odin build .\examples\triangle ^
 	-debug ^
 	-vet ^
     -strict-style ^

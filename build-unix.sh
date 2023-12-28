@@ -1,7 +1,7 @@
 #!/bin/bash
 
 OUTPUT_DIR=examples/build
-EXECUTABLE_NAME=hello_vulkan
+EXECUTABLE_NAME=triangle_debug
 
 # Ensure build folder exists
 if [ ! -d $OUTPUT_DIR ]; then
@@ -15,7 +15,7 @@ if [ -z "$cmd" ]; then
     cmd=build
 fi
 
-odin build ./examples/hello_vulkan \
+odin build ./examples/triangle \
     -debug \
     -vet \
     -strict-style \
