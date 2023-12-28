@@ -481,17 +481,13 @@ device_selector_is_device_suitable :: proc(
 
 	// Check if physical device name match criteria
 	if self.criteria.name != "" && self.criteria.name != pd.name {
-		log.warnf(
-			"Physical device [%s] is not the required [%s], ignoring...",
-			pd.name,
-			self.criteria.name,
-		)
+		log.warnf("[%s] is not the required [%s], ignoring...", pd.name, self.criteria.name)
 		return .No, nil
 	}
 
 	if self.criteria.required_version > pd.properties.apiVersion {
 		log.warnf(
-			"Physical device [%s] does not support required instance version [%u], ignoring...",
+			"[%s] does not support required instance version [%u], ignoring...",
 			pd.name,
 			self.criteria.required_version,
 		)
@@ -519,41 +515,29 @@ device_selector_is_device_suitable :: proc(
 		vk.QUEUE_FAMILY_IGNORED
 
 	if self.criteria.require_dedicated_compute_queue && !dedicated_compute {
-		log.warnf(
-			"Physical device [%s] does not support dedicated compute queue, ignoring...",
-			pd.name,
-		)
+		log.warnf("[%s] does not support dedicated compute queue, ignoring...", pd.name)
 		return .No, nil
 	}
 
 	if self.criteria.require_dedicated_transfer_queue && !dedicated_transfer {
-		log.warnf(
-			"Physical device [%s] does not support transfer compute queue, ignoring...",
-			pd.name,
-		)
+		log.warnf("[%s] does not support transfer compute queue, ignoring...", pd.name)
 		return .No, nil
 	}
 
 	if self.criteria.require_separate_compute_queue && !separate_compute {
-		log.warnf(
-			"Physical device [%s] does not support separate compute queue, ignoring...",
-			pd.name,
-		)
+		log.warnf("[%s] does not support separate compute queue, ignoring...", pd.name)
 		return .No, nil
 	}
 
 	if self.criteria.require_separate_transfer_queue && !separate_transfer {
-		log.warnf(
-			"Physical device [%s] does not support separate transfer queue, ignoring...",
-			pd.name,
-		)
+		log.warnf("[%s] does not support separate transfer queue, ignoring...", pd.name)
 		return .No, nil
 	}
 
 	if self.criteria.require_present &&
 	   !present_queue &&
 	   !self.criteria.defer_surface_initialization {
-		log.warnf("Physical device [%s] has no present queue, ignoring...", pd.name)
+		log.warnf("[%s] has no present queue, ignoring...", pd.name)
 		return .No, nil
 	}
 
@@ -603,7 +587,7 @@ device_selector_is_device_suitable :: proc(
 		}
 
 		if present_mode_count == 0 {
-			log.warnf("Physical device [%s] has no present modes, ignoring...", pd.name)
+			log.warnf("[%s] has no present modes, ignoring...", pd.name)
 			return .No, nil
 		}
 	}
@@ -611,7 +595,7 @@ device_selector_is_device_suitable :: proc(
 	if !self.criteria.allow_any_type &&
 	   pd.properties.deviceType != cast(vk.PhysicalDeviceType)self.criteria.preferred_type {
 		log.warnf(
-			"Physical device [%s] is not of preferred type: [%v], mark as 'Partial'",
+			"[%s] is not of preferred type: [%v], mark as 'Partial'",
 			pd.name,
 			self.criteria.preferred_type,
 		)
@@ -624,10 +608,7 @@ device_selector_is_device_suitable :: proc(
 		&pd.extended_features_chain,
 		&self.criteria.extended_features_chain,
 	) {
-		log.warnf(
-			"Physical device [%s] is missing required features support, ignoring...",
-			pd.name,
-		)
+		log.warnf("[%s] is missing required features support, ignoring...", pd.name)
 		return .No, nil
 	}
 
@@ -636,7 +617,7 @@ device_selector_is_device_suitable :: proc(
 		if .DEVICE_LOCAL in pd.memory_properties.memoryHeaps[i].flags {
 			if pd.memory_properties.memoryHeaps[i].size < self.criteria.required_mem_size {
 				log.warnf(
-					"Physical device [%s] does not have required [%v] memory, ignoring...",
+					"[%s] does not have required [%v] memory, ignoring...",
 					pd.name,
 					self.criteria.required_mem_size,
 				)
