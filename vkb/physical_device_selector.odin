@@ -235,7 +235,12 @@ selector_select_impl :: proc(
 	}
 
 	// Goof check for support device priority (arrange best at the top of the list)
-	rate_device_priority :: proc(pd: ^Physical_Device) -> (score: int) {
+	rate_device_priority :: proc(
+		pd: ^Physical_Device,
+		criteria: ^Selection_Criteria,
+	) -> (
+		score: int,
+	) {
 		// Check some application features support
 		if pd.features.geometryShader do score += 250
 		if pd.features.tessellationShader do score += 250
@@ -245,7 +250,16 @@ selector_select_impl :: proc(
 		score += int(pd.properties.limits.maxImageDimension2D)
 
 		// Discrete GPUs have a significant performance advantage
-		if pd.properties.deviceType == .DISCRETE_GPU do score += 1000
+		#partial switch criteria.preferred_type {
+		case .Integrated:
+			if pd.properties.deviceType == .INTEGRATED_GPU do score += 1000
+		case .Discrete:
+			if pd.properties.deviceType == .DISCRETE_GPU do score += 1000
+		case .Virtual_Gpu:
+			if pd.properties.deviceType == .VIRTUAL_GPU do score += 1000
+		case .CPU:
+			if pd.properties.deviceType == .CPU do score += 1000
+		}
 
 		return
 	}
@@ -266,7 +280,7 @@ selector_select_impl :: proc(
 		if pd.suitable != .No {
 			fill_out_phys_dev_with_criteria(self, pd) or_return
 
-			score := rate_device_priority(pd)
+			score := rate_device_priority(pd, &self.criteria)
 
 			if (score > high_score_device) {
 				high_score_device = score
