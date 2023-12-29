@@ -1,7 +1,6 @@
 package vk_bootstrap
 
 // Core
-import "core:container/queue"
 import "core:log"
 import "core:mem"
 import "core:runtime"
@@ -10,13 +9,11 @@ import "core:strings"
 // Vendor
 import vk "vendor:vulkan"
 
-@(private)
 Physical_Device_Selector :: struct {
 	instance_info: Instance_Info,
 	criteria:      Selection_Criteria,
 }
 
-@(private)
 Instance_Info :: struct {
 	instance:                vk.Instance,
 	surface:                 vk.SurfaceKHR,
@@ -26,7 +23,6 @@ Instance_Info :: struct {
 }
 
 //Criteria information to select a suitable gpu.
-@(private)
 Selection_Criteria :: struct {
 	name:                             string,
 	preferred_type:                   Preferred_Device_Type,
@@ -243,14 +239,6 @@ selector_select_impl :: proc(
 		return
 	}
 
-	pd_by_priority: queue.Queue(^Physical_Device)
-	queue.init(&pd_by_priority, int(physical_device_count), context.temp_allocator) or_return
-	defer if err != nil {
-		for &pd in pd_by_priority.data {
-			destroy_physical_device(pd)
-		}
-	}
-
 	// Goof check for support device priority (arrange best at the top of the list)
 	rate_device_priority :: proc(pd: ^Physical_Device) -> (score: int) {
 		// Check some application features support
@@ -287,9 +275,10 @@ selector_select_impl :: proc(
 
 			if (score > high_score_device) {
 				high_score_device = score
-				queue.push_front(&pd_by_priority, pd)
+				// High score devices are at the beginning of the list
+				inject_at(&physical_devices, 0, pd)
 			} else {
-				queue.push_back(&pd_by_priority, pd)
+				append(&physical_devices, pd)
 			}
 
 			if pd.suitable == .Yes {
@@ -302,27 +291,17 @@ selector_select_impl :: proc(
 		}
 	}
 
-	pd_total := int(pd_by_priority.len)
+	pd_total := len(physical_devices)
 
 	if pd_total == 0 {
 		log.error("No suitable device found")
 		return physical_devices, .No_Suitable_Device
 	}
 
-	resize(&physical_devices, pd_total)
-
 	if pd_total == 1 {
-		physical_devices[0] = queue.get(&pd_by_priority, 0)
 		return
 	}
 
-	// TODO(Capati): Why append does not work?
-	for i in 0 ..< pd_total {
-		physical_devices[i] = queue.get(&pd_by_priority, i)
-		// append(&physical_devices, queue.get(&pd_by_priority, i))
-	}
-
-	// Sort into fully and partially suitable devices
 	fully_supported := make(
 		[dynamic]^Physical_Device,
 		fully_supported_count,
@@ -334,7 +313,8 @@ selector_select_impl :: proc(
 		context.temp_allocator,
 	) or_return
 
-	for pd, i in &physical_devices {
+	// Sort into fully and partially suitable devices
+	for &pd, i in physical_devices {
 		if pd.suitable == .Yes {
 			fully_supported[i] = pd
 		} else {
