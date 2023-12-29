@@ -135,7 +135,6 @@ select_physical_device :: proc(
 	return
 }
 
-@(private)
 selector_select_impl :: proc(
 	self: ^Physical_Device_Selector,
 	selection: Device_Selection_Mode,
@@ -356,7 +355,6 @@ selector_select_impl :: proc(
 	return
 }
 
-@(private)
 selector_populate_device_details :: proc(
 	self: ^Physical_Device_Selector,
 	vk_physical_device: vk.PhysicalDevice,
@@ -466,7 +464,6 @@ selector_populate_device_details :: proc(
 	return
 }
 
-@(private)
 device_selector_is_device_suitable :: proc(
 	self: ^Physical_Device_Selector,
 	pd: ^Physical_Device,

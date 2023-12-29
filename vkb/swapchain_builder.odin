@@ -8,7 +8,6 @@ import "core:runtime"
 // Vendor
 import vk "vendor:vulkan"
 
-@(private)
 Swapchain_Builder :: struct {
 	physical_device:          ^Physical_Device,
 	device:                   ^Device,
@@ -39,8 +38,7 @@ Buffer_Mode :: enum u32 {
 	Triple_Buffering = 3,
 }
 
-@(private)
-default_swapchain_builder :: Swapchain_Builder {
+DEFAULT_SWAPCHAIN_BUILDER :: Swapchain_Builder {
 	instance_version = vk.API_VERSION_1_0,
 	create_flags = {},
 	desired_width = 256,
@@ -59,7 +57,7 @@ init_swapchain_builder_default :: proc(
 	builder: Swapchain_Builder,
 	err: Error,
 ) {
-	builder = default_swapchain_builder
+	builder = DEFAULT_SWAPCHAIN_BUILDER
 
 	builder.physical_device = device.physical_device
 	builder.device = device
@@ -79,7 +77,7 @@ init_swapchain_builder_surface :: proc(
 	builder: Swapchain_Builder,
 	err: Error,
 ) {
-	builder = default_swapchain_builder
+	builder = DEFAULT_SWAPCHAIN_BUILDER
 
 	builder.physical_device = device.physical_device
 	builder.device = device
@@ -105,7 +103,7 @@ init_swapchain_builder_handles :: proc(
 	builder: Swapchain_Builder,
 	err: Error,
 ) {
-	builder = default_swapchain_builder
+	builder = DEFAULT_SWAPCHAIN_BUILDER
 
 	builder.physical_device = device.physical_device
 	builder.device = device
@@ -384,7 +382,6 @@ build_swapchain :: proc(self: ^Swapchain_Builder) -> (swapchain: ^Swapchain, err
 	return
 }
 
-@(private)
 swapchain_builder_set_old_swapchain_vulkan :: proc(
 	self: ^Swapchain_Builder,
 	old_swapchain: vk.SwapchainKHR,
@@ -392,7 +389,6 @@ swapchain_builder_set_old_swapchain_vulkan :: proc(
 	self.old_swapchain = old_swapchain
 }
 
-@(private)
 swapchain_builder_set_old_swapchain_vkb :: proc(
 	self: ^Swapchain_Builder,
 	old_swapchain: Swapchain,
@@ -492,7 +488,6 @@ swapchain_builder_set_image_array_layer_count :: proc(
 	self.array_layer_count = array_layer_count
 }
 
-@(private)
 swapchain_builder_set_desired_min_image_count_value :: proc(
 	self: ^Swapchain_Builder,
 	min_image_count: u32,
@@ -500,7 +495,6 @@ swapchain_builder_set_desired_min_image_count_value :: proc(
 	self.min_image_count = min_image_count
 }
 
-@(private)
 swapchain_builder_set_desired_min_image_count_buffer_mode :: proc(
 	self: ^Swapchain_Builder,
 	buffer_mode: Buffer_Mode,

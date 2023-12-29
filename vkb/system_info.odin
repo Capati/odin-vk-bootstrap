@@ -156,7 +156,6 @@ is_extension_available :: proc(self: ^System_Info, ext_name: cstring) -> bool {
 	return check_extension_supported(&self.available_extensions, ext_name)
 }
 
-@(private)
 check_layer_supported :: proc(
 	available_layers: ^[]vk.LayerProperties,
 	layer_name: cstring,
@@ -172,7 +171,6 @@ check_layer_supported :: proc(
 	return false
 }
 
-@(private)
 check_extension_supported :: proc(
 	available_extensions: ^[]vk.ExtensionProperties,
 	ext_name: cstring,
@@ -188,7 +186,6 @@ check_extension_supported :: proc(
 	return false
 }
 
-@(private)
 check_layers_supported :: proc(
 	available_layers: ^[]vk.LayerProperties,
 	required_layers: ^[dynamic]cstring,
@@ -204,7 +201,6 @@ check_layers_supported :: proc(
 	return all_supported
 }
 
-@(private)
 check_extensions_supported :: proc(
 	available_extensions: ^[]vk.ExtensionProperties,
 	required_extensions: ^[dynamic]cstring,

@@ -576,7 +576,6 @@ instance_set_allocation_callbacks :: proc(
 // Default debug messenger.
 // Feel free to copy-paste it into your own code, change it as needed, then call
 //  `instance_set_debug_callback()` to use that instead.
-@(private)
 default_debug_callback :: proc "system" (
 	message_severity: vk.DebugUtilsMessageSeverityFlagsEXT,
 	message_types: vk.DebugUtilsMessageTypeFlagsEXT,

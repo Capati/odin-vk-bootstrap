@@ -6,7 +6,6 @@ import "core:log"
 // Vendor
 import vk "vendor:vulkan"
 
-@(private)
 check_device_extension_support :: proc(
 	available_extensions: ^[]vk.ExtensionProperties,
 	required_extensions: []cstring,
