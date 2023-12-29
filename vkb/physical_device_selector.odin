@@ -155,7 +155,7 @@ selector_select_impl :: proc(
 	if (self.criteria.require_present && !self.criteria.defer_surface_initialization) {
 		if (self.instance_info.surface == 0) {
 			log.errorf("Present is required, but no surface is provided.")
-			return physical_devices, .No_Surface_Provided
+			return {}, .No_Surface_Provided
 		}
 	}
 
@@ -167,12 +167,12 @@ selector_select_impl :: proc(
 		nil,
 	); res != .SUCCESS {
 		log.errorf("Failed to enumerate physical devices count: [%v]", res)
-		return physical_devices, .Failed_Enumerate_Physical_Devices
+		return {}, .Failed_Enumerate_Physical_Devices
 	}
 
 	if physical_device_count == 0 {
 		log.errorf("No physical device with Vulkan support detected.")
-		return physical_devices, .No_Physical_Devices_Found
+		return {}, .No_Physical_Devices_Found
 	}
 
 	runtime.DEFAULT_TEMP_ALLOCATOR_TEMP_GUARD(ignore = allocator == context.temp_allocator)
@@ -199,11 +199,6 @@ selector_select_impl :: proc(
 		err: Error,
 	) {
 		physical_device.features = self.criteria.required_features
-		// physical_device.extended_features_chain = make(
-		// 	[dynamic]Generic_Feature,
-		// 	len(self.criteria.extended_features_chain),
-		// ) or_return
-		// copy(physical_device.extended_features_chain[:], self.criteria.extended_features_chain[:])
 		portability_ext_available := false
 
 		if self.criteria.enable_portability_subset {
