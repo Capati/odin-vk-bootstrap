@@ -1,7 +1,6 @@
 package vk_bootstrap
 
 // Core
-import "core:container/queue"
 import "core:log"
 import "core:mem"
 import "core:runtime"
@@ -16,7 +15,7 @@ Swapchain_Builder :: struct {
 	p_next_chain:             [dynamic]^vk.BaseOutStructure,
 	create_flags:             vk.SwapchainCreateFlagsKHR,
 	surface:                  vk.SurfaceKHR,
-	desired_formats:          Desired_Formats,
+	desired_formats:          [dynamic]vk.SurfaceFormatKHR,
 	instance_version:         u32,
 	desired_width:            u32,
 	desired_height:           u32,
@@ -28,7 +27,7 @@ Swapchain_Builder :: struct {
 	present_queue_index:      u32,
 	pre_transform:            vk.SurfaceTransformFlagsKHR,
 	composite_alpha:          vk.CompositeAlphaFlagsKHR,
-	desired_present_modes:    Desired_Present_Modes,
+	desired_present_modes:    [dynamic]vk.PresentModeKHR,
 	clipped:                  bool,
 	old_swapchain:            vk.SwapchainKHR,
 	allocation_callbacks:     ^vk.AllocationCallbacks,
@@ -39,12 +38,6 @@ Buffer_Mode :: enum u32 {
 	Double_Buffering = 2,
 	Triple_Buffering = 3,
 }
-
-@(private)
-Desired_Formats :: queue.Queue(vk.SurfaceFormatKHR)
-
-@(private)
-Desired_Present_Modes :: queue.Queue(vk.PresentModeKHR)
 
 @(private)
 default_swapchain_builder :: Swapchain_Builder {
@@ -73,8 +66,6 @@ init_swapchain_builder_default :: proc(
 	builder.graphics_queue_index = device_get_queue_index(device, .Graphics) or_return
 	builder.allocation_callbacks = device.allocation_callbacks
 
-	swapchain_builder_utils_init_containers(&builder) or_return
-
 	return
 }
 
@@ -97,8 +88,6 @@ init_swapchain_builder_surface :: proc(
 	builder.graphics_queue_index = device_get_queue_index(device, .Graphics) or_return
 	device.surface = default_surface
 	builder.allocation_callbacks = device.allocation_callbacks
-
-	swapchain_builder_utils_init_containers(&builder) or_return
 
 	return
 }
@@ -168,8 +157,6 @@ init_swapchain_builder_handles :: proc(
 
 	builder.allocation_callbacks = device.allocation_callbacks
 
-	swapchain_builder_utils_init_containers(&builder) or_return
-
 	return
 }
 
@@ -187,8 +174,8 @@ init_swapchain_builder :: proc {
 
 destroy_swapchain_builder :: proc(self: ^Swapchain_Builder) {
 	delete(self.p_next_chain)
-	queue.destroy(&self.desired_present_modes)
-	queue.destroy(&self.desired_formats)
+	delete(self.desired_present_modes)
+	delete(self.desired_formats)
 }
 
 // Create a `Swapchain`. Return an error if it failed.
@@ -203,44 +190,20 @@ build_swapchain :: proc(self: ^Swapchain_Builder) -> (swapchain: ^Swapchain, err
 
 	runtime.DEFAULT_TEMP_ALLOCATOR_TEMP_GUARD()
 
-	desired_formats_len := self.desired_formats.len
+	desired_formats := make([dynamic]vk.SurfaceFormatKHR, context.temp_allocator) or_return
 
-	desired_formats, desired_formats_err := make(
-		[dynamic]vk.SurfaceFormatKHR,
-		desired_formats_len,
-		context.temp_allocator,
-	)
-	if desired_formats_err != nil {
-		log.errorf("Failed to allocate desired formats: [%v]", desired_formats_err)
-		return nil, desired_formats_err
-	}
-
-	if desired_formats_len == 0 {
+	if len(self.desired_formats) == 0 {
 		swapchain_builder_utils_add_desired_formats(&desired_formats)
 	} else {
-		for i in 0 ..< desired_formats_len {
-			desired_formats[i] = queue.get(&self.desired_formats, i)
-		}
+		append(&desired_formats, ..self.desired_formats[:])
 	}
 
-	desired_present_modes_len := self.desired_present_modes.len
+	desired_present_modes := make([dynamic]vk.PresentModeKHR, context.temp_allocator) or_return
 
-	desired_present_modes, desired_present_modes_err := make(
-		[dynamic]vk.PresentModeKHR,
-		desired_present_modes_len,
-		context.temp_allocator,
-	)
-	if desired_present_modes_err != nil {
-		log.errorf("Failed to allocate desired present modes: [%v]", desired_present_modes_err)
-		return nil, desired_present_modes_err
-	}
-
-	if desired_present_modes_len == 0 {
+	if len(self.desired_present_modes) == 0 {
 		swapchain_builder_utils_add_desired_present_modes(&desired_present_modes)
 	} else {
-		for i in 0 ..< desired_present_modes_len {
-			desired_present_modes[i] = queue.get(&self.desired_present_modes, i)
-		}
+		append(&desired_present_modes, ..self.desired_present_modes[:])
 	}
 
 	// Get surface support details (capabilities, formats and present modes)
@@ -451,7 +414,7 @@ swapchain_builder_set_desired_format :: proc(
 	self: ^Swapchain_Builder,
 	format: vk.SurfaceFormatKHR,
 ) {
-	queue.push_front(&self.desired_formats, format)
+	inject_at(&self.desired_formats, 0, format)
 }
 
 // Add this swapchain format to the end of the list of formats selected from.
@@ -459,13 +422,13 @@ swapchain_builder_add_fallback_format :: proc(
 	self: ^Swapchain_Builder,
 	format: vk.SurfaceFormatKHR,
 ) {
-	queue.push_back(&self.desired_formats, format)
+	append(&self.desired_formats, format)
 }
 
 // Use the default swapchain formats. This is done if no formats are provided.
 // Default surface format is {VK_FORMAT_B8G8R8A8_SRGB, VK_COLOR_SPACE_SRGB_NONLINEAR_KHR}
 swapchain_builder_use_default_format_selection :: proc(self: ^Swapchain_Builder) {
-	queue.clear(&self.desired_formats)
+	clear(&self.desired_formats)
 	swapchain_builder_utils_add_desired_formats(&self.desired_formats)
 }
 
@@ -474,7 +437,7 @@ swapchain_builder_set_present_mode :: proc(
 	self: ^Swapchain_Builder,
 	present_mode: vk.PresentModeKHR,
 ) {
-	queue.push_front(&self.desired_present_modes, present_mode)
+	inject_at(&self.desired_present_modes, 0, present_mode)
 }
 
 // Add this present mode to the end of the list of present modes selected from.
@@ -482,13 +445,13 @@ swapchain_builder_add_fallback_present_mode :: proc(
 	self: ^Swapchain_Builder,
 	present_mode: vk.PresentModeKHR,
 ) {
-	queue.push_back(&self.desired_present_modes, present_mode)
+	append(&self.desired_present_modes, present_mode)
 }
 
 // Use the default presentation mode. This is done if no present modes are provided.
 // Default present modes: `vk.PRESENT_MODE_MAILBOX_KHR` with fallback `vk.PRESENT_MODE_FIFO_KHR`
 swapchain_builder_use_default_present_mode_selection :: proc(self: ^Swapchain_Builder) {
-	queue.clear(&self.desired_present_modes)
+	clear(&self.desired_present_modes)
 	swapchain_builder_utils_add_desired_present_modes(&self.desired_present_modes)
 }
 

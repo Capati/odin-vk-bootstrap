@@ -2,67 +2,21 @@
 package vk_bootstrap
 
 // Core
-import "core:container/queue"
 import "core:log"
 
 // Vendor
 import vk "vendor:vulkan"
 
-swapchain_builder_utils_add_desired_formats_queue :: proc(formats: ^Desired_Formats) {
-	queue.push_back(
-		formats,
-		vk.SurfaceFormatKHR{format = .B8G8R8A8_SRGB, colorSpace = .SRGB_NONLINEAR},
-	)
-	queue.push_back(
-		formats,
-		vk.SurfaceFormatKHR{format = .R8G8B8A8_SRGB, colorSpace = .SRGB_NONLINEAR},
-	)
-}
-
-swapchain_builder_utils_add_desired_formats_dynamic :: proc(
-	formats: ^[dynamic]vk.SurfaceFormatKHR,
-) {
+swapchain_builder_utils_add_desired_formats :: proc(formats: ^[dynamic]vk.SurfaceFormatKHR) {
 	append(formats, vk.SurfaceFormatKHR{format = .B8G8R8A8_SRGB, colorSpace = .SRGB_NONLINEAR})
 	append(formats, vk.SurfaceFormatKHR{format = .R8G8B8A8_SRGB, colorSpace = .SRGB_NONLINEAR})
 }
 
-swapchain_builder_utils_add_desired_formats :: proc {
-	swapchain_builder_utils_add_desired_formats_queue,
-	swapchain_builder_utils_add_desired_formats_dynamic,
-}
-
-swapchain_builder_utils_add_desired_present_modes_queue :: proc(
-	present_modes: ^Desired_Present_Modes,
-) {
-	queue.push_back(present_modes, vk.PresentModeKHR.MAILBOX)
-	queue.push_back(present_modes, vk.PresentModeKHR.FIFO)
-}
-
-swapchain_builder_utils_add_desired_present_modes_dynamic :: proc(
+swapchain_builder_utils_add_desired_present_modes :: proc(
 	present_modes: ^[dynamic]vk.PresentModeKHR,
 ) {
 	append(present_modes, vk.PresentModeKHR.MAILBOX)
 	append(present_modes, vk.PresentModeKHR.FIFO)
-}
-
-swapchain_builder_utils_add_desired_present_modes :: proc {
-	swapchain_builder_utils_add_desired_present_modes_queue,
-	swapchain_builder_utils_add_desired_present_modes_dynamic,
-}
-
-swapchain_builder_utils_init_containers :: proc(self: ^Swapchain_Builder) -> (err: Error) {
-	if err := queue.init(&self.desired_formats, 2); err != nil {
-		log.errorf("Failed to initialize desired formats list: [%v]", err)
-		return err
-	}
-	defer if err != nil do queue.destroy(&self.desired_formats)
-
-	if err := queue.init(&self.desired_present_modes, 2); err != nil {
-		log.errorf("Failed to initialize desired present modes list: [%v]", err)
-		return err
-	}
-
-	return nil
 }
 
 Surface_Support_Details :: struct {
