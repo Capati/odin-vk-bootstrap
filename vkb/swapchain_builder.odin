@@ -42,11 +42,14 @@ Buffer_Mode :: enum u32 {
 @(private)
 default_swapchain_builder :: Swapchain_Builder {
 	instance_version = vk.API_VERSION_1_0,
+	create_flags = {},
 	desired_width = 256,
 	desired_height = 256,
 	array_layer_count = 1,
 	image_usage_flags = {.COLOR_ATTACHMENT},
+	pre_transform = {},
 	composite_alpha = {.OPAQUE},
+	clipped = true,
 }
 
 // Construct a `Swapchain_Builder` with a `vkb.Device`.
@@ -247,6 +250,7 @@ build_swapchain :: proc(self: ^Swapchain_Builder) -> (swapchain: ^Swapchain, err
 		&desired_formats,
 	)
 
+	log.infof("Image count: [%d]", image_count)
 	log.infof("Selected surface format: [%v]", surface_format.format)
 	log.infof("Selected surface color space: [%v]", surface_format.colorSpace)
 
@@ -296,8 +300,7 @@ build_swapchain :: proc(self: ^Swapchain_Builder) -> (swapchain: ^Swapchain, err
 	}
 
 	pre_transform := self.pre_transform
-	// TODO
-	if self.pre_transform == nil || self.pre_transform == {.IDENTITY} {
+	if self.pre_transform == {} {
 		pre_transform = surface_support.capabilities.currentTransform
 	}
 
@@ -334,6 +337,8 @@ build_swapchain :: proc(self: ^Swapchain_Builder) -> (swapchain: ^Swapchain, err
 	} else {
 		swapchain_create_info.imageSharingMode = .EXCLUSIVE
 	}
+
+	log.infof("Image sharing mode: [%v]", swapchain_create_info.imageSharingMode)
 
 	swapchain_create_info.preTransform = pre_transform
 	swapchain_create_info.compositeAlpha = self.composite_alpha
