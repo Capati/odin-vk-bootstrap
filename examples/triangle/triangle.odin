@@ -495,6 +495,7 @@ record_command_buffer :: proc(
 ) {
 	begin_info := vk.CommandBufferBeginInfo {
 		sType = .COMMAND_BUFFER_BEGIN_INFO,
+		flags = {.ONE_TIME_SUBMIT},
 	}
 
 	if res := vk.BeginCommandBuffer(buffer, &begin_info); res != .SUCCESS {
@@ -709,6 +710,13 @@ cleanup :: proc(s: ^State, data: ^Render_Data) {
 	delete(data.finished_semaphores)
 	delete(data.available_semaphores)
 	delete(data.in_flight_fences)
+
+	// vk.FreeCommandBuffers(
+	// 	s.device.ptr,
+	// 	data.command_pool,
+	// 	u32(len(data.command_buffers)),
+	// 	raw_data(data.command_buffers),
+	// )
 
 	vk.DestroyCommandPool(s.device.ptr, data.command_pool, nil)
 
