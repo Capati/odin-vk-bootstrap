@@ -391,9 +391,13 @@ swapchain_builder_set_old_swapchain_vulkan :: proc(
 
 swapchain_builder_set_old_swapchain_vkb :: proc(
 	self: ^Swapchain_Builder,
-	old_swapchain: Swapchain,
+	old_swapchain: ^Swapchain,
 ) {
-	self.old_swapchain = old_swapchain.ptr
+	if old_swapchain != nil && old_swapchain.ptr != 0 {
+		self.old_swapchain = old_swapchain.ptr
+	} else {
+		self.old_swapchain = 0
+	}
 }
 
 // Set the `old_swapchain` field of `vk.SwapchainCreateInfoKHR`.
