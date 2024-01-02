@@ -6,22 +6,13 @@ Read the [Getting Started](./docs/getting_started.md) guide for a quick start on
 
 ## Basic Usage
 
-Copy the `vkb` folder to your project.
+Copy the `vkb` folder to your project or to `shared` directory.
 
 ```odin
-import "core:log"
-_ :: log
 import "vkb"
 import vk "vendor:vulkan"
 
 main :: proc() {
-    when ODIN_DEBUG {
-        // Create a logger to see debug messages
-        // Do this before create the instance builder
-        context.logger = log.create_console_logger(opt = {.Level, .Terminal_Color})
-        defer log.destroy_console_logger(context.logger)
-    }
-
     // Start by creating a new instance builder
     instance_builder, instance_builder_err := vkb.init_instance_builder()
     if instance_builder_err != nil do return
