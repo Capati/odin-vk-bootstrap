@@ -130,7 +130,7 @@ device_initialization :: proc(s: ^State) -> (err: Error) {
 
 	// Physical device
 	selector := vkb.init_physical_device_selector(s.instance) or_return
-	defer vkb.destroy_selection_criteria(&selector)
+	defer vkb.destroy_physical_device_selector(&selector)
 
 	vkb.selector_set_minimum_version(&selector, MINIMUM_API_VERSION)
 	vkb.selector_set_surface(&selector, s.surface)

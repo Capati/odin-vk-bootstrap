@@ -87,7 +87,7 @@ init_physical_device_selector :: proc(
 	return
 }
 
-destroy_selection_criteria :: proc(self: ^Physical_Device_Selector) {
+destroy_physical_device_selector :: proc(self: ^Physical_Device_Selector) {
 	delete(self.criteria.required_extensions)
 	delete(self.criteria.extended_features_chain)
 }
