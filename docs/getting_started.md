@@ -21,7 +21,7 @@ The builder can return a valid `Instance_Builder` variable and a possible error:
 
 ```odin
 instance_builder, instance_builder_err := vkb.init_instance_builder()
-if instance_builder_err != nil do return
+if instance_builder_err != nil do return // error
 // destroy the builder after the vulkan handle is created
 defer vkb.destroy_instance_builder(&instance_builder)
 ```
@@ -30,7 +30,7 @@ When you ready to create an instance, call the procedure `vkb.build_instance`. Y
 
 ```odin
 instance, instance_err := vkb.build_instance(&instance_builder)
-if instance_err != nil do return
+if instance_err != nil do return // error
 // When the application is finished with the vulkan, call `vkb.destroy_instance` to
 // free internal data and destroy the wrapped `vk.Instance`
 defer vkb.destroy_instance(instance)
@@ -123,7 +123,7 @@ err := glfw.CreateWindowSurface (instance.ptr, window, NULL, &surface)
 if err != .SUCCESS { /* handle error */ }
 
 // SDL2
-You need to create a window with the `.VULKAN` flag:
+// You need to create a window with the `.VULKAN` flag:
 window_flags: sdl.WindowFlags = {.VULKAN, .ALLOW_HIGHDPI, .SHOWN}
 ...
 // After window creation:
@@ -148,7 +148,7 @@ defer vkb.destroy_physical_device_selector(&selector)
 vkb.selector_set_surface(&selector, surface_handle)
 
 physical_device, physical_device_err := vkb.select_physical_device(&selector)
-if physical_device_err != nil do return
+if physical_device_err != nil do return // error
 // In Vulkan you don't need to destroy a physical device, but here you need
 // to free some resources when the physical device was created.
 defer vkb.destroy_physical_device(physical_device)
