@@ -772,9 +772,11 @@ main :: proc() {
 	render_data: Render_Data
 
 	if device_initialization(&state) != nil do return
+
 	width, height: i32
 	sdl.GetWindowSize(state.window, &width, &height)
 	if create_swapchain(&state, u32(width), u32(height)) != nil do return
+
 	if get_queue(&state, &render_data) != nil do return
 	if create_render_pass(&state, &render_data) != nil do return
 	if create_graphics_pipeline(&state, &render_data) != nil do return
