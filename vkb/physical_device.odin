@@ -1,5 +1,8 @@
 package vk_bootstrap
 
+// Core
+import "core:log"
+
 // Vendor
 import vk "vendor:vulkan"
 
@@ -112,8 +115,36 @@ physical_device_enable_extension_if_present :: proc(
 			return true
 		}
 	}
+
+	log.warnf("The extension [%s] is not available", extension)
+
 	return false
 }
+
+// If all the given extensions are present, make all the extensions be enabled on the device.
+// Returns `true` if all the extensions are present.
+physical_device_enable_extensions_if_present :: proc(
+	self: ^Physical_Device,
+	extensions: []cstring,
+) -> bool {
+	all_ext_present := true
+
+	for available in &self.available_extensions {
+		for ext in extensions {
+			if cstring(&available.extensionName[0]) != ext {
+				log.warnf("The extension [%s] is not available", ext)
+				all_ext_present = false
+			}
+		}
+	}
+
+	if !all_ext_present do return false
+
+	append(&self.extensions_to_enable, ..extensions[:])
+
+	return true
+}
+
 
 // Get the supported sample counts.
 physical_device_get_supported_sample_counts :: proc(
