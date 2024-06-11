@@ -3,7 +3,7 @@ package vk_bootstrap
 // Core
 import "core:log"
 import "core:mem"
-import "core:runtime"
+import "base:runtime"
 import "core:strings"
 
 // Vendor
@@ -201,7 +201,7 @@ selector_select_impl :: proc(
 		portability_ext_available := false
 
 		if self.criteria.enable_portability_subset {
-			for extension in &physical_device.available_extensions {
+			for &extension in &physical_device.available_extensions {
 				if cstring(&extension.extensionName[0]) == "VK_KHR_portability_subset" {
 					portability_ext_available = true
 					break

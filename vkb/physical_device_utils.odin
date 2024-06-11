@@ -18,7 +18,7 @@ check_device_extension_support :: proc(
 		return true
 	}
 
-	for avail_ext in available_extensions {
+	for &avail_ext in available_extensions {
 		for req_ext in required_extensions {
 			if cstring(&avail_ext.extensionName[0]) != req_ext {
 				log.warnf("Required extension [%s] is not available", req_ext)

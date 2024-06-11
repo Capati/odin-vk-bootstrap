@@ -2,7 +2,7 @@ package vk_bootstrap
 
 // Core
 import "core:log"
-import "core:runtime"
+import "base:runtime"
 
 // Vendor
 import vk "vendor:vulkan"
@@ -39,7 +39,7 @@ get_system_info :: proc() -> (info: System_Info, err: Error) {
 			return {}, .Instance_Layer_Error
 		}
 
-		for layer, i in &info.available_layers {
+		for &layer in &info.available_layers {
 			if cstring(&layer.layerName[0]) == VALIDATION_LAYER_NAME {
 				info.validation_layers_available = true
 				break
@@ -73,7 +73,7 @@ get_system_info :: proc() -> (info: System_Info, err: Error) {
 		}
 
 		// Check if `VK_EXT_debug_utils` extensions is available
-		for ext in &available_extensions {
+		for &ext in &available_extensions {
 			if cstring(&ext.extensionName[0]) == vk.EXT_DEBUG_UTILS_EXTENSION_NAME {
 				info.debug_utils_available = true
 				break
@@ -82,7 +82,7 @@ get_system_info :: proc() -> (info: System_Info, err: Error) {
 	}
 
 	// Check for layer extensions
-	for layer in &info.available_layers {
+	for &layer in &info.available_layers {
 		layer_extension_count: u32 = 0
 		if res := vk.EnumerateInstanceExtensionProperties(
 			cstring(&layer.layerName[0]),
@@ -110,9 +110,9 @@ get_system_info :: proc() -> (info: System_Info, err: Error) {
 			return {}, .Instance_Extension_Error
 		}
 
-		for ext in &layer_extensions {
+		for &ext in &layer_extensions {
 			found := false
-			for available_ext in &available_extensions {
+			for &available_ext in &available_extensions {
 				if cstring(&available_ext.extensionName[0]) == cstring(&ext.extensionName[0]) {
 					found = true
 					break
@@ -162,7 +162,7 @@ check_layer_supported :: proc(
 ) -> bool {
 	if layer_name == nil do return false
 
-	for layer in available_layers {
+	for &layer in available_layers {
 		if (cstring(&layer.layerName[0]) == layer_name) {
 			return true
 		}
@@ -177,7 +177,7 @@ check_extension_supported :: proc(
 ) -> bool {
 	if ext_name == nil do return false
 
-	for ext in available_extensions {
+	for &ext in available_extensions {
 		if (cstring(&ext.extensionName[0]) == ext_name) {
 			return true
 		}
