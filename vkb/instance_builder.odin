@@ -3,7 +3,7 @@ package vk_bootstrap
 // Core
 import "core:log"
 import "core:mem"
-import "core:runtime"
+import "base:runtime"
 import "core:strings"
 
 // Vendor

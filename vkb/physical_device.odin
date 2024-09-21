@@ -97,7 +97,7 @@ physical_device_get_available_extensions :: proc(
 
 // Returns true if an extension should be enabled on the device.
 physical_device_is_extension_present :: proc(self: ^Physical_Device, extension: cstring) -> bool {
-	for ext in &self.available_extensions {
+	for &ext in &self.available_extensions {
 		if cstring(&ext.extensionName[0]) == extension do return true
 	}
 	return false
@@ -109,7 +109,7 @@ physical_device_enable_extension_if_present :: proc(
 	self: ^Physical_Device,
 	extension: cstring,
 ) -> bool {
-	for ext in &self.available_extensions {
+	for &ext in &self.available_extensions {
 		if cstring(&ext.extensionName[0]) == extension {
 			append(&self.extensions_to_enable, extension)
 			return true
@@ -129,7 +129,7 @@ physical_device_enable_extensions_if_present :: proc(
 ) -> bool {
 	all_ext_present := true
 
-	for available in &self.available_extensions {
+	for &available in &self.available_extensions {
 		for ext in extensions {
 			if cstring(&available.extensionName[0]) != ext {
 				log.warnf("The extension [%s] is not available", ext)
