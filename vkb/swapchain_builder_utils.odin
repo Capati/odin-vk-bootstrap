@@ -1,4 +1,4 @@
-//+private
+#+private
 package vk_bootstrap
 
 // Core
