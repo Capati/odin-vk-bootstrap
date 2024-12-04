@@ -1,9 +1,9 @@
 package vk_bootstrap
 
 // Core
+import "base:runtime"
 import "core:log"
 import "core:mem"
-import "base:runtime"
 import "core:slice"
 
 // Vendor
@@ -93,6 +93,7 @@ build_device :: proc(self: ^Device_Builder) -> (device: ^Device, err: Error) {
 	// Enable all supported device extensions
 	extensions_to_enable := make(
 		[dynamic]cstring,
+		0,
 		len(self.physical_device.extensions_to_enable),
 		context.temp_allocator,
 	) or_return
