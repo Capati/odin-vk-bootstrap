@@ -1,9 +1,9 @@
 package vk_bootstrap
 
 // Core
+import "base:runtime"
 import "core:log"
 import "core:mem"
-import "base:runtime"
 import "core:strings"
 
 // Vendor
@@ -126,9 +126,7 @@ build_instance :: proc(self: ^Instance_Builder) -> (instance: ^Instance, err: Er
 		self.app_name != "" ? strings.clone_to_cstring(self.app_name, context.temp_allocator) : ""
 	app_info.applicationVersion = self.application_version
 	app_info.pEngineName =
-		self.engine_name != "" \
-		? strings.clone_to_cstring(self.engine_name, context.temp_allocator) \
-		: ""
+		self.engine_name != "" ? strings.clone_to_cstring(self.engine_name, context.temp_allocator) : ""
 	app_info.engineVersion = self.engine_version
 	app_info.apiVersion = api_version
 
@@ -178,7 +176,7 @@ build_instance :: proc(self: ^Instance_Builder) -> (instance: ^Instance, err: Er
 
 		if (portability_enumeration_support) {
 			log.infof("Extension [%s] enabled", vk.KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME)
-			extensions[vk.KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME] = true
+			append(&extensions, vk.KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME)
 		}
 	}
 
@@ -200,10 +198,10 @@ build_instance :: proc(self: ^Instance_Builder) -> (instance: ^Instance, err: Er
 		}
 
 		if !check_add_window_ext(
-			   vk.KHR_SURFACE_EXTENSION_NAME,
-			   &extensions,
-			   &self.info.available_extensions,
-		   ) {
+			vk.KHR_SURFACE_EXTENSION_NAME,
+			&extensions,
+			&self.info.available_extensions,
+		) {
 			log.fatalf(
 				"Required base windowing extension [%s] not present!",
 				vk.KHR_SURFACE_EXTENSION_NAME,
