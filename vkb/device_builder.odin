@@ -1,12 +1,10 @@
 package vk_bootstrap
 
-// Core
+// Packages
 import "base:runtime"
 import "core:log"
 import "core:mem"
 import "core:slice"
-
-// Vendor
 import vk "vendor:vulkan"
 
 Device_Builder :: struct {

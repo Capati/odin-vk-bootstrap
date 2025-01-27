@@ -1,11 +1,9 @@
 package vk_bootstrap
 
-// Core
+// Packages
 import "base:runtime"
 import "core:log"
 import "core:mem"
-
-// Vendor
 import vk "vendor:vulkan"
 
 Swapchain_Builder :: struct {

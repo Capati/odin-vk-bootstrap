@@ -1,10 +1,8 @@
 package vk_bootstrap
 
-// Core
+// Packages
 import "base:runtime"
 import "core:log"
-
-// Vendor
 import vk "vendor:vulkan"
 
 // Gathers useful information about the available vulkan capabilities, like layers and instance
