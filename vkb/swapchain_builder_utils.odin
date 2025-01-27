@@ -62,7 +62,9 @@ swapchain_builder_utils_query_surface_support_details :: proc(
 	}
 
 	details.formats = make([]vk.SurfaceFormatKHR, int(format_count), allocator) or_return
-	defer if err != nil do delete(details.formats)
+	defer if err != nil {
+		delete(details.formats)
+	}
 
 	if res := vk.GetPhysicalDeviceSurfaceFormatsKHR(
 		physical_device,
@@ -92,7 +94,9 @@ swapchain_builder_utils_query_surface_support_details :: proc(
 	}
 
 	details.present_modes = make([]vk.PresentModeKHR, int(present_mode_count), allocator) or_return
-	defer if err != nil do delete(details.present_modes)
+	defer if err != nil {
+		delete(details.present_modes)
+	}
 
 	if res := vk.GetPhysicalDeviceSurfacePresentModesKHR(
 		physical_device,
@@ -178,7 +182,9 @@ swapchain_builder_utils_find_present_mode :: proc(
 	for desired in desired_present_modes {
 		for available in available_resent_modes {
 			// finds the first present mode that is desired and available
-			if (desired == available) do return desired
+			if (desired == available) {
+				return desired
+			}
 		}
 	}
 

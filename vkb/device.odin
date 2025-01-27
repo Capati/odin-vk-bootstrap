@@ -23,7 +23,9 @@ Queue_Type :: enum {
 }
 
 destroy_device :: proc(self: ^Device) {
-	if self == nil do return
+	if self == nil {
+		return
+	}
 	defer free(self)
 	delete(self.queue_families)
 	vk.DestroyDevice(self.ptr, self.allocation_callbacks)

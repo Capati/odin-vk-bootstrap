@@ -1,8 +1,8 @@
 package vk_bootstrap
 
 // Core
-import "core:log"
 import "base:runtime"
+import "core:log"
 
 // Vendor
 import vk "vendor:vulkan"
@@ -93,7 +93,9 @@ get_system_info :: proc() -> (info: System_Info, err: Error) {
 			return {}, .Instance_Extension_Error
 		}
 
-		if layer_extension_count == 0 do continue
+		if layer_extension_count == 0 {
+			continue
+		}
 
 		layer_extensions := make(
 			[]vk.ExtensionProperties,
@@ -124,7 +126,9 @@ get_system_info :: proc() -> (info: System_Info, err: Error) {
 				append(&available_extensions, ext)
 			}
 
-			if info.debug_utils_available do continue
+			if info.debug_utils_available {
+				continue
+			}
 
 			// Check if `VK_EXT_debug_utils` extensions is available from this layer extension
 			if cstring(&ext.extensionName[0]) == vk.EXT_DEBUG_UTILS_EXTENSION_NAME {
@@ -146,13 +150,17 @@ destroy_system_info :: proc(self: ^System_Info) {
 
 // Returns true if a layer is available.
 is_layer_available :: proc(self: ^System_Info, layer_name: cstring) -> bool {
-	if layer_name == nil do return false
+	if layer_name == nil {
+		return false
+	}
 	return check_layer_supported(&self.available_layers, layer_name)
 }
 
 // Returns true if an extension is available.
 is_extension_available :: proc(self: ^System_Info, ext_name: cstring) -> bool {
-	if ext_name == nil do return false
+	if ext_name == nil {
+		return false
+	}
 	return check_extension_supported(&self.available_extensions, ext_name)
 }
 
@@ -160,7 +168,9 @@ check_layer_supported :: proc(
 	available_layers: ^[]vk.LayerProperties,
 	layer_name: cstring,
 ) -> bool {
-	if layer_name == nil do return false
+	if layer_name == nil {
+		return false
+	}
 
 	for &layer in available_layers {
 		if (cstring(&layer.layerName[0]) == layer_name) {
@@ -175,7 +185,9 @@ check_extension_supported :: proc(
 	available_extensions: ^[]vk.ExtensionProperties,
 	ext_name: cstring,
 ) -> bool {
-	if ext_name == nil do return false
+	if ext_name == nil {
+		return false
+	}
 
 	for &ext in available_extensions {
 		if (cstring(&ext.extensionName[0]) == ext_name) {
@@ -193,7 +205,9 @@ check_layers_supported :: proc(
 	all_supported := true
 
 	for layer_name in required_layers {
-		if check_layer_supported(available_layers, layer_name) do continue
+		if check_layer_supported(available_layers, layer_name) {
+			continue
+		}
 		log.errorf("Required instance layer [%s] not present!", layer_name)
 		all_supported = false
 	}
@@ -208,7 +222,9 @@ check_extensions_supported :: proc(
 	all_supported := true
 
 	for ext_name in required_extensions {
-		if check_extension_supported(available_extensions, ext_name) do continue
+		if check_extension_supported(available_extensions, ext_name) {
+			continue
+		}
 		log.errorf("Required instance extension [%s] not present!", ext_name)
 		all_supported = false
 	}

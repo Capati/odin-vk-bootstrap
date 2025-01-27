@@ -22,7 +22,9 @@ destroy_surface :: proc(self: ^Instance, surface: vk.SurfaceKHR) {
 
 // Destroy the instance and the debug messenger.
 destroy_instance :: proc(self: ^Instance) {
-	if self == nil do return
+	if self == nil {
+		return
+	}
 	defer free(self)
 	if self.ptr != nil {
 		if self.debug_messenger != 0 {

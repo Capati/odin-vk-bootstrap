@@ -1,9 +1,9 @@
 package vk_bootstrap
 
 // Core
+import "base:runtime"
 import "core:log"
 import "core:mem"
-import "base:runtime"
 
 // Vendor
 import vk "vendor:vulkan"
@@ -39,15 +39,15 @@ Buffer_Mode :: enum u32 {
 }
 
 DEFAULT_SWAPCHAIN_BUILDER :: Swapchain_Builder {
-	instance_version = vk.API_VERSION_1_0,
-	create_flags = {},
-	desired_width = 256,
-	desired_height = 256,
+	instance_version  = vk.API_VERSION_1_0,
+	create_flags      = {},
+	desired_width     = 256,
+	desired_height    = 256,
 	array_layer_count = 1,
 	image_usage_flags = {.COLOR_ATTACHMENT},
-	pre_transform = {},
-	composite_alpha = {.OPAQUE},
-	clipped = true,
+	pre_transform     = {},
+	composite_alpha   = {.OPAQUE},
+	clipped           = true,
 }
 
 // Construct a `Swapchain_Builder` with a `vkb.Device`.
@@ -267,7 +267,9 @@ build_swapchain :: proc(self: ^Swapchain_Builder) -> (swapchain: ^Swapchain, err
 		)
 		image_array_layers = surface_support.capabilities.maxImageArrayLayers
 	}
-	if (self.array_layer_count == 0) do image_array_layers = 1
+	if (self.array_layer_count == 0) {
+		image_array_layers = 1
+	}
 
 	queue_family_indices: [Queue_Family_Indices]u32 = {
 		.Graphics = self.graphics_queue_index,

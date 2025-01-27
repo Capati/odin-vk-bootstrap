@@ -5,7 +5,9 @@ import vk "vendor:vulkan"
 
 setup_p_next_chain :: proc(structure: ^$T, structs: ^[dynamic]^vk.BaseOutStructure) {
 	structure.pNext = nil
-	if len(structs) <= 0 do return
+	if len(structs) <= 0 {
+		return
+	}
 	for i: uint = 0; i < len(structs) - 1; i += 1 {
 		structs[i].pNext = structs[i + 1]
 	}

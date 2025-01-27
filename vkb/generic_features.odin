@@ -47,7 +47,9 @@ generic_features_match :: proc(
 		// Skip fields sType and pNext
 		field := reflect.struct_field_at(requested.type, i + 2)
 		// Check if there is no more features bits
-		if field.name == "" do return
+		if field.name == "" {
+			return
+		}
 
 		if requested.p_next.fields[i] && !supported.p_next.fields[i] {
 			log.warnf(

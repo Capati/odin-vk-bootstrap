@@ -433,7 +433,9 @@ instance_set_minimum_versioned :: proc(self: ^Instance_Builder, major, minor, pa
 // Adds a layer to be enabled.
 // Will fail to create an instance if the layer isn't available.
 instance_enable_layer :: proc(self: ^Instance_Builder, layer_name: cstring) {
-	if layer_name == nil do return
+	if layer_name == nil {
+		return
+	}
 	log.infof("Layer [%s] enabled", layer_name)
 	append(&self.layers, layer_name)
 }
@@ -441,7 +443,9 @@ instance_enable_layer :: proc(self: ^Instance_Builder, layer_name: cstring) {
 // Adds an extension to be enabled.
 // Will fail to create an instance if the extension isn't available.
 instance_enable_extension :: proc(self: ^Instance_Builder, extension_name: cstring) {
-	if extension_name == nil do return
+	if extension_name == nil {
+		return
+	}
 	log.infof("Extension [%s] enabled", extension_name)
 	append(&self.extensions, extension_name)
 }
@@ -459,7 +463,9 @@ instance_enable_extensions_count :: proc(
 	count: uint,
 	extensions: []cstring,
 ) {
-	if count == 0 || count > len(extensions) do return
+	if count == 0 || count > len(extensions) {
+		return
+	}
 	for i: uint = 0; i < count; i += 1 {
 		append(&self.extensions, extensions[i])
 	}

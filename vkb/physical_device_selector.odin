@@ -1,9 +1,9 @@
 package vk_bootstrap
 
 // Core
+import "base:runtime"
 import "core:log"
 import "core:mem"
-import "base:runtime"
 import "core:strings"
 
 // Vendor
@@ -241,9 +241,15 @@ selector_select_impl :: proc(
 		score: int,
 	) {
 		// Check some application features support
-		if pd.features.geometryShader do score += 250
-		if pd.features.tessellationShader do score += 250
-		if pd.features.multiViewport do score += 250
+		if pd.features.geometryShader {
+			score += 250
+		}
+		if pd.features.tessellationShader {
+			score += 250
+		}
+		if pd.features.multiViewport {
+			score += 250
+		}
 
 		// Maximum possible size of textures affects graphics quality
 		score += int(pd.properties.limits.maxImageDimension2D)
@@ -251,13 +257,21 @@ selector_select_impl :: proc(
 		// Discrete GPUs have a significant performance advantage
 		#partial switch criteria.preferred_type {
 		case .Integrated:
-			if pd.properties.deviceType == .INTEGRATED_GPU do score += 1000
+			if pd.properties.deviceType == .INTEGRATED_GPU {
+				score += 1000
+			}
 		case .Discrete:
-			if pd.properties.deviceType == .DISCRETE_GPU do score += 1000
+			if pd.properties.deviceType == .DISCRETE_GPU {
+				score += 1000
+			}
 		case .Virtual_Gpu:
-			if pd.properties.deviceType == .VIRTUAL_GPU do score += 1000
+			if pd.properties.deviceType == .VIRTUAL_GPU {
+				score += 1000
+			}
 		case .CPU:
-			if pd.properties.deviceType == .CPU do score += 1000
+			if pd.properties.deviceType == .CPU {
+				score += 1000
+			}
 		}
 
 		return
@@ -403,7 +417,9 @@ selector_populate_device_details :: proc(
 		&queue_family_count,
 		raw_data(pd.queue_families),
 	)
-	defer if err != nil do delete(pd.queue_families)
+	defer if err != nil {
+		delete(pd.queue_families)
+	}
 
 	// Get device features and memory properties
 	vk.GetPhysicalDeviceFeatures(vk_physical_device, &pd.features)
@@ -433,7 +449,9 @@ selector_populate_device_details :: proc(
 		log.errorf("Failed to enumerate device extensions properties: [%s]", res)
 		return pd, .Failed_Enumerate_Physical_Device_Extensions
 	}
-	defer if err != nil do delete(pd.available_extensions)
+	defer if err != nil {
+		delete(pd.available_extensions)
+	}
 
 	// Same value as the non-KHR version
 	pd.features2.sType = .PHYSICAL_DEVICE_FEATURES_2
@@ -562,7 +580,9 @@ device_selector_is_device_suitable :: proc(
 			return .No, nil
 		}
 
-		if format_count == 0 do return .No, nil
+		if format_count == 0 {
+			return .No, nil
+		}
 
 		// Supported present modes
 		present_mode_count: u32
@@ -702,7 +722,9 @@ selector_add_required_extensions_count :: proc(
 	count: uint,
 	extensions: ^[]cstring,
 ) {
-	if count == 0 || count > len(extensions) do return
+	if count == 0 || count > len(extensions) {
+		return
+	}
 	for i: uint = 0; i < count; i += 1 {
 		append(&self.criteria.required_extensions, extensions[i])
 	}

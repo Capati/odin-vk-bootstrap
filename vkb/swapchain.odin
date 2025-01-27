@@ -32,7 +32,9 @@ Queue_Family_Indices :: enum {
 }
 
 destroy_swapchain :: proc(self: ^Swapchain) {
-	if self == nil do return
+	if self == nil {
+		return
+	}
 	defer free(self)
 	if self.device != nil && self.ptr != 0 {
 		vk.DestroySwapchainKHR(self.device.ptr, self.ptr, self.allocation_callbacks)

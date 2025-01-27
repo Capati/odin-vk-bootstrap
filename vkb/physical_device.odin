@@ -31,7 +31,9 @@ Physical_Device :: struct {
 }
 
 destroy_physical_device :: proc(self: ^Physical_Device) {
-	if self == nil do return
+	if self == nil {
+		return
+	}
 	defer free(self)
 	delete(self.extensions_to_enable)
 	delete(self.available_extensions)
@@ -98,7 +100,9 @@ physical_device_get_available_extensions :: proc(
 // Returns true if an extension should be enabled on the device.
 physical_device_is_extension_present :: proc(self: ^Physical_Device, extension: cstring) -> bool {
 	for &ext in &self.available_extensions {
-		if cstring(&ext.extensionName[0]) == extension do return true
+		if cstring(&ext.extensionName[0]) == extension {
+			return true
+		}
 	}
 	return false
 }
@@ -138,7 +142,9 @@ physical_device_enable_extensions_if_present :: proc(
 		}
 	}
 
-	if !all_ext_present do return false
+	if !all_ext_present {
+		return false
+	}
 
 	append(&self.extensions_to_enable, ..extensions[:])
 
