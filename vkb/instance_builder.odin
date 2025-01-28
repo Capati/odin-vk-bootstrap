@@ -411,8 +411,9 @@ instance_set_engine_versioned :: proc(self: ^Instance_Builder, major, minor, pat
 }
 
 /*
-Require a vulkan API version. Will fail to create if this version isn't available. Should be
-constructed with `vk.MAKE_VERSION`.
+Require a vulkan API version. Should be constructed with `vk.MAKE_VERSION`.
+
+Will fail to create if this version isn't available.
 */
 instance_require_api_version :: proc(self: ^Instance_Builder, required_api_version: u32) {
 	self.required_api_version = required_api_version
