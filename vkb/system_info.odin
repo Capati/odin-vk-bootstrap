@@ -19,14 +19,14 @@ System_Info :: struct {
 VALIDATION_LAYER_NAME :: "VK_LAYER_KHRONOS_validation"
 
 // Get information about the available vulkan capabilities.
-get_system_info :: proc() -> (info: System_Info, err: Error) {
+get_system_info :: proc() -> (info: System_Info, ok: bool) #optional_ok {
 	layer_count: u32
 	if res := vk.EnumerateInstanceLayerProperties(&layer_count, nil); res != .SUCCESS {
 		log.errorf("Failed to enumerate instance layer properties count: [%v]", res)
-		return {}, .Instance_Layer_Error
+		return
 	}
 
-	info.available_layers = make([]vk.LayerProperties, layer_count) or_return
+	info.available_layers = make([]vk.LayerProperties, layer_count)
 
 	if layer_count > 0 {
 		if res := vk.EnumerateInstanceLayerProperties(
@@ -34,7 +34,7 @@ get_system_info :: proc() -> (info: System_Info, err: Error) {
 			raw_data(info.available_layers),
 		); res != .SUCCESS {
 			log.errorf("Failed to enumerate instance layer properties: [%v]", res)
-			return {}, .Instance_Layer_Error
+			return
 		}
 
 		for &layer in &info.available_layers {
@@ -49,16 +49,13 @@ get_system_info :: proc() -> (info: System_Info, err: Error) {
 	if res := vk.EnumerateInstanceExtensionProperties(nil, &extension_count, nil);
 	   res != .SUCCESS {
 		log.errorf("Failed to enumerate instance extension properties: [%v]", res)
-		return {}, .Instance_Extension_Error
+		return
 	}
 
+	ta := context.temp_allocator
 	runtime.DEFAULT_TEMP_ALLOCATOR_TEMP_GUARD()
 
-	available_extensions := make(
-		[dynamic]vk.ExtensionProperties,
-		extension_count,
-		context.temp_allocator,
-	) or_return
+	available_extensions := make([dynamic]vk.ExtensionProperties, extension_count, ta)
 
 	if extension_count > 0 {
 		if res := vk.EnumerateInstanceExtensionProperties(
@@ -67,7 +64,7 @@ get_system_info :: proc() -> (info: System_Info, err: Error) {
 			raw_data(available_extensions),
 		); res != .SUCCESS {
 			log.errorf("Failed to enumerate instance extension properties: [%v]", res)
-			return {}, .Instance_Extension_Error
+			return
 		}
 
 		// Check if `VK_EXT_debug_utils` extensions is available
@@ -88,18 +85,14 @@ get_system_info :: proc() -> (info: System_Info, err: Error) {
 			nil,
 		); res != .SUCCESS {
 			log.errorf("Failed to enumerate layer extension properties: [%v]", res)
-			return {}, .Instance_Extension_Error
+			return
 		}
 
 		if layer_extension_count == 0 {
 			continue
 		}
 
-		layer_extensions := make(
-			[]vk.ExtensionProperties,
-			layer_extension_count,
-			context.temp_allocator,
-		) or_return
+		layer_extensions := make([]vk.ExtensionProperties, layer_extension_count, ta)
 
 		if res := vk.EnumerateInstanceExtensionProperties(
 			cstring(&layer.layerName[0]),
@@ -107,7 +100,7 @@ get_system_info :: proc() -> (info: System_Info, err: Error) {
 			raw_data(layer_extensions),
 		); res != .SUCCESS {
 			log.errorf("Failed to enumerate layer extension properties: [%v]", res)
-			return {}, .Instance_Extension_Error
+			return
 		}
 
 		for &ext in &layer_extensions {
@@ -135,10 +128,10 @@ get_system_info :: proc() -> (info: System_Info, err: Error) {
 		}
 	}
 
-	info.available_extensions = make([]vk.ExtensionProperties, extension_count) or_return
+	info.available_extensions = make([]vk.ExtensionProperties, extension_count)
 	copy(info.available_extensions[:], available_extensions[:])
 
-	return
+	return info, true
 }
 
 destroy_system_info :: proc(self: ^System_Info) {

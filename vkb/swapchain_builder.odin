@@ -3,7 +3,6 @@ package vk_bootstrap
 // Packages
 import "base:runtime"
 import "core:log"
-import "core:mem"
 import vk "vendor:vulkan"
 
 Swapchain_Builder :: struct {
@@ -53,8 +52,8 @@ init_swapchain_builder_default :: proc(
 	device: ^Device,
 ) -> (
 	builder: Swapchain_Builder,
-	err: Error,
-) {
+	ok: bool,
+) #optional_ok {
 	builder = DEFAULT_SWAPCHAIN_BUILDER
 
 	builder.physical_device = device.physical_device
@@ -65,7 +64,7 @@ init_swapchain_builder_default :: proc(
 	builder.graphics_queue_index = device_get_queue_index(device, .Graphics) or_return
 	builder.allocation_callbacks = device.allocation_callbacks
 
-	return
+	return builder, true
 }
 
 init_swapchain_builder_surface :: proc(
@@ -73,8 +72,8 @@ init_swapchain_builder_surface :: proc(
 	surface: vk.SurfaceKHR,
 ) -> (
 	builder: Swapchain_Builder,
-	err: Error,
-) {
+	ok: bool,
+) #optional_ok {
 	builder = DEFAULT_SWAPCHAIN_BUILDER
 
 	builder.physical_device = device.physical_device
@@ -88,7 +87,7 @@ init_swapchain_builder_surface :: proc(
 	device.surface = default_surface
 	builder.allocation_callbacks = device.allocation_callbacks
 
-	return
+	return builder, true
 }
 
 init_swapchain_builder_handles :: proc(
@@ -99,8 +98,8 @@ init_swapchain_builder_handles :: proc(
 	present_queue_index: u32 = vk.QUEUE_FAMILY_IGNORED,
 ) -> (
 	builder: Swapchain_Builder,
-	err: Error,
-) {
+	ok: bool,
+) #optional_ok {
 	builder = DEFAULT_SWAPCHAIN_BUILDER
 
 	builder.physical_device = device.physical_device
@@ -110,6 +109,7 @@ init_swapchain_builder_handles :: proc(
 	builder.present_queue_index = present_queue_index
 	builder.graphics_queue_index = graphics_queue_index
 
+	ta := context.temp_allocator
 	runtime.DEFAULT_TEMP_ALLOCATOR_TEMP_GUARD()
 
 	if graphics_queue_index == vk.QUEUE_FAMILY_IGNORED ||
@@ -122,17 +122,17 @@ init_swapchain_builder_handles :: proc(
 			log.error(
 				"Failed to get physical device queue family properties: Queue family is empty!",
 			)
-			return {}, .Queue_Family_Properties_Empty
+			return
 		}
 
 		queue_families, queue_families_err := make(
 			[]vk.QueueFamilyProperties,
 			int(queue_family_count),
-			context.temp_allocator,
+			ta,
 		)
 		if queue_families_err != nil {
 			log.fatalf("Failed to allocate queue families: [%v]", queue_families_err)
-			return {}, queue_families_err
+			return
 		}
 
 		vk.GetPhysicalDeviceQueueFamilyProperties(
@@ -156,7 +156,7 @@ init_swapchain_builder_handles :: proc(
 
 	builder.allocation_callbacks = device.allocation_callbacks
 
-	return
+	return builder, true
 }
 
 // Construct a `Swapchain_Builder`:
@@ -179,17 +179,23 @@ destroy_swapchain_builder :: proc(self: ^Swapchain_Builder) {
 
 // Create a `Swapchain`. Return an error if it failed.
 @(require_results)
-build_swapchain :: proc(self: ^Swapchain_Builder) -> (swapchain: ^Swapchain, err: Error) {
+build_swapchain :: proc(
+	self: ^Swapchain_Builder,
+) -> (
+	swapchain: ^Swapchain,
+	ok: bool,
+) #optional_ok {
 	log.info("Building swapchain...")
 
 	if self.surface == 0 {
 		log.error("Swapchain requires a surface handle")
-		return nil, .Surface_Handle_Not_Provided
+		return
 	}
 
+	ta := context.temp_allocator
 	runtime.DEFAULT_TEMP_ALLOCATOR_TEMP_GUARD()
 
-	desired_formats := make([dynamic]vk.SurfaceFormatKHR, context.temp_allocator) or_return
+	desired_formats := make([dynamic]vk.SurfaceFormatKHR, ta)
 
 	if len(self.desired_formats) == 0 {
 		swapchain_builder_utils_add_desired_formats(&desired_formats)
@@ -197,7 +203,7 @@ build_swapchain :: proc(self: ^Swapchain_Builder) -> (swapchain: ^Swapchain, err
 		append(&desired_formats, ..self.desired_formats[:])
 	}
 
-	desired_present_modes := make([dynamic]vk.PresentModeKHR, context.temp_allocator) or_return
+	desired_present_modes := make([dynamic]vk.PresentModeKHR, ta)
 
 	if len(self.desired_present_modes) == 0 {
 		swapchain_builder_utils_add_desired_present_modes(&desired_present_modes)
@@ -221,7 +227,7 @@ build_swapchain :: proc(self: ^Swapchain_Builder) -> (swapchain: ^Swapchain, err
 				"Required minimum image count [%d] is too low",
 				self.required_min_image_count,
 			)
-			return nil, .Required_Min_Image_Count_Too_Low
+			return
 		}
 
 		image_count = self.required_min_image_count
@@ -294,7 +300,7 @@ build_swapchain :: proc(self: ^Swapchain_Builder) -> (swapchain: ^Swapchain, err
 	   (self.image_usage_flags & surface_support.capabilities.supportedUsageFlags) !=
 		   self.image_usage_flags {
 		log.errorf("Required image usages [%v] not supported", self.image_usage_flags)
-		return nil, .Required_Usage_Not_Supported
+		return
 	}
 
 	pre_transform := self.pre_transform
@@ -344,14 +350,10 @@ build_swapchain :: proc(self: ^Swapchain_Builder) -> (swapchain: ^Swapchain, err
 	swapchain_create_info.clipped = b32(self.clipped)
 	swapchain_create_info.oldSwapchain = self.old_swapchain
 
-	alloc_err: mem.Allocator_Error
-	swapchain, alloc_err = new(Swapchain)
-	if alloc_err != nil {
-		log.errorf("Failed to allocate a swapchain object: [%v]", alloc_err)
-		return nil, alloc_err
-	}
-	defer if err != nil {
-		free(swapchain);swapchain = nil
+	swapchain = new(Swapchain)
+	ensure(swapchain != nil, "Failed to allocate a swapchain object")
+	defer if !ok {
+		free(swapchain)
 	}
 
 	if res := vk.CreateSwapchainKHR(
@@ -361,7 +363,7 @@ build_swapchain :: proc(self: ^Swapchain_Builder) -> (swapchain: ^Swapchain, err
 		&swapchain.ptr,
 	); res != .SUCCESS {
 		log.fatalf("Failed to create Swapchain: [%v]", res)
-		return swapchain, .Failed_Create_Swapchain
+		return
 	}
 
 	swapchain.queue_indices = queue_family_indices
@@ -371,7 +373,7 @@ build_swapchain :: proc(self: ^Swapchain_Builder) -> (swapchain: ^Swapchain, err
 	swapchain.image_usage_flags = self.image_usage_flags
 	swapchain.extent = extent
 
-	images := swapchain_get_images(swapchain, context.temp_allocator) or_return
+	images := swapchain_get_images(swapchain, ta) or_return
 
 	swapchain.requested_min_image_count = image_count
 	swapchain.present_mode = present_mode
@@ -379,7 +381,7 @@ build_swapchain :: proc(self: ^Swapchain_Builder) -> (swapchain: ^Swapchain, err
 	swapchain.instance_version = self.instance_version
 	swapchain.allocation_callbacks = self.allocation_callbacks
 
-	return
+	return swapchain, true
 }
 
 swapchain_builder_set_old_swapchain_vulkan :: proc(

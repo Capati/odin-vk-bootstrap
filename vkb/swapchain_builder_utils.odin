@@ -29,11 +29,11 @@ swapchain_builder_utils_query_surface_support_details :: proc(
 	allocator := context.allocator,
 ) -> (
 	details: Surface_Support_Details,
-	err: Error,
-) {
+	ok: bool,
+) #optional_ok {
 	if surface == 0 {
 		log.error("Surface handle cannot be null")
-		return {}, .Surface_Handle_Null
+		return
 	}
 
 	// Capabilities
@@ -43,7 +43,7 @@ swapchain_builder_utils_query_surface_support_details :: proc(
 		&details.capabilities,
 	); res != .SUCCESS {
 		log.fatalf("Failed to get physical device surface capabilities? [%v]", res)
-		return {}, .Failed_Get_Surface_Capabilities
+		return
 	}
 
 	// Supported formats
@@ -51,16 +51,16 @@ swapchain_builder_utils_query_surface_support_details :: proc(
 	if res := vk.GetPhysicalDeviceSurfaceFormatsKHR(physical_device, surface, &format_count, nil);
 	   res != .SUCCESS {
 		log.fatalf("Failed to get surface formats count: [%v]", res)
-		return {}, .Failed_Enumerate_Surface_Formats
+		return
 	}
 
 	if format_count == 0 {
 		log.fatal("No surface format found!")
-		return {}, .Failed_Enumerate_Surface_Formats
+		return
 	}
 
-	details.formats = make([]vk.SurfaceFormatKHR, int(format_count), allocator) or_return
-	defer if err != nil {
+	details.formats = make([]vk.SurfaceFormatKHR, int(format_count), allocator)
+	defer if !ok {
 		delete(details.formats)
 	}
 
@@ -71,7 +71,7 @@ swapchain_builder_utils_query_surface_support_details :: proc(
 		raw_data(details.formats),
 	); res != .SUCCESS {
 		log.fatalf("Failed to get surface formats: [%v]", res)
-		return {}, .Failed_Enumerate_Surface_Formats
+		return
 	}
 
 	// Supported present modes
@@ -83,16 +83,16 @@ swapchain_builder_utils_query_surface_support_details :: proc(
 		nil,
 	); res != .SUCCESS {
 		log.fatalf("Failed to get surface present modes count: [%v]", res)
-		return {}, .Failed_Enumerate_Present_Modes
+		return
 	}
 
 	if present_mode_count == 0 {
 		log.fatal("No surface present mode found.")
-		return {}, .Failed_Enumerate_Present_Modes
+		return
 	}
 
-	details.present_modes = make([]vk.PresentModeKHR, int(present_mode_count), allocator) or_return
-	defer if err != nil {
+	details.present_modes = make([]vk.PresentModeKHR, int(present_mode_count), allocator)
+	defer if !ok {
 		delete(details.present_modes)
 	}
 
@@ -103,20 +103,20 @@ swapchain_builder_utils_query_surface_support_details :: proc(
 		raw_data(details.present_modes),
 	); res != .SUCCESS {
 		log.fatalf("Failed to get surface present modes: [%v]", res)
-		return {}, .Failed_Enumerate_Present_Modes
+		return
 	}
 
-	return
+	return details, true
 }
 
 swapchain_builder_utils_find_best_surface_format :: proc(
 	available_formats: ^[]vk.SurfaceFormatKHR,
 	desired_formats: ^[dynamic]vk.SurfaceFormatKHR,
 ) -> vk.SurfaceFormatKHR {
-	if surface_format, err := swapchain_builder_utils_find_desired_surface_format(
+	if surface_format, ok := swapchain_builder_utils_find_desired_surface_format(
 		available_formats,
 		desired_formats,
-	); err == nil {
+	); ok {
 		return surface_format
 	}
 
@@ -134,21 +134,23 @@ swapchain_builder_utils_find_desired_surface_format :: proc(
 	available_formats: ^[]vk.SurfaceFormatKHR,
 	desired_formats: ^[dynamic]vk.SurfaceFormatKHR,
 ) -> (
-	vk.SurfaceFormatKHR,
-	Error,
+	format: vk.SurfaceFormatKHR,
+	ok: bool,
 ) {
 	for desired in desired_formats {
 		for available in available_formats {
 			// finds the first format that is desired and available
 			if desired.format == available.format && desired.colorSpace == available.colorSpace {
-				return desired, nil
+				return desired, true
 			}
 		}
 	}
 
+	log.warn("No suitable desired format")
+
 	// if no desired format is available,
 	// we report that no format is suitable to the user request
-	return {}, .No_Suitable_Desired_Format
+	return
 }
 
 swapchain_builder_utils_find_extent :: proc(

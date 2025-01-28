@@ -3,7 +3,6 @@ package vk_bootstrap
 // Packages
 import "base:runtime"
 import "core:log"
-import "core:mem"
 import "core:strings"
 import vk "vendor:vulkan"
 
@@ -48,7 +47,7 @@ Instance_Builder :: struct {
 _logger: log.Logger
 
 // Create an `Instance_Builder` with some defaults.
-init_instance_builder :: proc() -> (builder: Instance_Builder, err: Error) {
+init_instance_builder :: proc() -> (builder: Instance_Builder, ok: bool) #optional_ok {
 	_logger = context.logger
 
 	builder.required_api_version = vk.API_VERSION_1_0
@@ -59,7 +58,7 @@ init_instance_builder :: proc() -> (builder: Instance_Builder, err: Error) {
 	// Get supported layers and extensions
 	builder.info = get_system_info() or_return
 
-	return
+	return builder, true
 }
 
 // Destroy the `Instance_Builder` and internal data.
@@ -74,7 +73,7 @@ destroy_instance_builder :: proc(self: ^Instance_Builder) {
 
 // Create a `VkInstance`. Return an error if it failed.
 @(require_results)
-build_instance :: proc(self: ^Instance_Builder) -> (instance: ^Instance, err: Error) {
+build_instance :: proc(self: ^Instance_Builder) -> (instance: ^Instance, ok: bool) {
 	log.info("Building instance...")
 
 	// Current supported instance version
@@ -85,20 +84,28 @@ build_instance :: proc(self: ^Instance_Builder) -> (instance: ^Instance, err: Er
 		   self.required_api_version > vk.API_VERSION_1_0) {
 
 		if res := vk.EnumerateInstanceVersion(&instance_version); res != .SUCCESS {
-			return nil, .Vulkan_Version_Unavailable
+			log.error("Vulkan version unavailable")
+			return
 		}
 
 		if (instance_version < self.minimum_instance_version ||
 			   (self.minimum_instance_version == 0 &&
 					   instance_version < self.required_api_version)) {
-			if VK_VERSION_MINOR(self.required_api_version) == 3 {
-				return nil, .Vulkan_Version_1_3_Unavailable
+			if VK_VERSION_MINOR(self.required_api_version) == 4 {
+				log.error("Vulkan version 1.4 unavailable")
+				return
+			} else if VK_VERSION_MINOR(self.required_api_version) == 3 {
+				log.error("Vulkan version 1.3 unavailable")
+				return
 			} else if VK_VERSION_MINOR(self.required_api_version) == 2 {
-				return nil, .Vulkan_Version_1_2_Unavailable
+				log.error("Vulkan version 1.2 unavailable")
+				return
 			} else if (VK_VERSION_MINOR(self.required_api_version) == 1) {
-				return nil, .Vulkan_Version_1_1_Unavailable
+				log.error("Vulkan version 1.1 unavailable")
+				return
 			} else {
-				return nil, .Vulkan_Version_Unavailable
+				log.error("Vulkan version unavailable")
+				return
 			}
 		}
 	}
@@ -115,20 +122,21 @@ build_instance :: proc(self: ^Instance_Builder) -> (instance: ^Instance, err: Er
 		VK_VERSION_PATCH(api_version),
 	)
 
+	ta := context.temp_allocator
 	runtime.DEFAULT_TEMP_ALLOCATOR_TEMP_GUARD()
 
-	app_info := vk.ApplicationInfo{}
-	app_info.sType = .APPLICATION_INFO
-	app_info.pNext = nil
+	app_info := vk.ApplicationInfo {
+		sType              = .APPLICATION_INFO,
+		engineVersion      = self.engine_version,
+		apiVersion         = api_version,
+		applicationVersion = self.application_version,
+	}
 	app_info.pApplicationName =
-		self.app_name != "" ? strings.clone_to_cstring(self.app_name, context.temp_allocator) : ""
-	app_info.applicationVersion = self.application_version
+		self.app_name != "" ? strings.clone_to_cstring(self.app_name, ta) : ""
 	app_info.pEngineName =
-		self.engine_name != "" ? strings.clone_to_cstring(self.engine_name, context.temp_allocator) : ""
-	app_info.engineVersion = self.engine_version
-	app_info.apiVersion = api_version
+		self.engine_name != "" ? strings.clone_to_cstring(self.engine_name, ta) : ""
 
-	extensions := make([dynamic]cstring, context.temp_allocator) or_return
+	extensions := make([dynamic]cstring, ta)
 	append(&extensions, ..self.extensions[:])
 
 	if self.use_debug_messenger && !self.info.debug_utils_available {
@@ -204,7 +212,7 @@ build_instance :: proc(self: ^Instance_Builder) -> (instance: ^Instance, err: Er
 				"Required base windowing extension [%s] not present!",
 				vk.KHR_SURFACE_EXTENSION_NAME,
 			)
-			return nil, .Windowing_Extensions_Not_Present
+			return
 		}
 
 		when ODIN_OS == .Windows {
@@ -242,12 +250,13 @@ build_instance :: proc(self: ^Instance_Builder) -> (instance: ^Instance, err: Er
 				&self.info.available_extensions,
 			)
 		} else {
-			return nil, .Windowing_Extensions_Not_Present
+			log.fatalf("Unsupported platform!")
+			return
 		}
 
 		if !added_window_exts {
 			log.fatalf("Required windowing extensions not present!")
-			return nil, .Windowing_Extensions_Not_Present
+			return
 		}
 	}
 
@@ -257,10 +266,11 @@ build_instance :: proc(self: ^Instance_Builder) -> (instance: ^Instance, err: Er
 	)
 
 	if !required_extensions_supported {
-		return nil, .Requested_Extensions_Not_Present
+		log.fatalf("Requested extensions not present!")
+		return
 	}
 
-	layers := make([dynamic]cstring, context.temp_allocator) or_return
+	layers := make([dynamic]cstring, ta)
 	append(&layers, ..self.layers[:])
 
 	if (self.enable_validation_layers ||
@@ -272,10 +282,11 @@ build_instance :: proc(self: ^Instance_Builder) -> (instance: ^Instance, err: Er
 	required_layers_supported := check_layers_supported(&self.info.available_layers, &layers)
 
 	if !required_layers_supported {
-		return nil, .Requested_Layers_Not_Present
+		log.fatalf("Requested layers not present!")
+		return
 	}
 
-	p_next_chain := make([dynamic]^vk.BaseOutStructure, context.temp_allocator) or_return
+	p_next_chain := make([dynamic]^vk.BaseOutStructure, ta)
 
 	messenger_create_info := vk.DebugUtilsMessengerCreateInfoEXT{}
 	if self.use_debug_messenger {
@@ -324,20 +335,16 @@ build_instance :: proc(self: ^Instance_Builder) -> (instance: ^Instance, err: Er
 		}
 	}
 
-	alloc_err: mem.Allocator_Error
-	instance, alloc_err = new(Instance)
-	if alloc_err != nil {
-		log.errorf("Failed to allocate an instance object: [%v]", alloc_err)
-		return nil, alloc_err
-	}
-	defer if err != nil {
+	instance = new(Instance)
+	ensure(instance != nil, "Failed to allocate an instance object")
+	defer if !ok {
 		free(instance);instance = nil
 	}
 
 	if res := vk.CreateInstance(&instance_create_info, self.allocation_callbacks, &instance.ptr);
 	   res != .SUCCESS {
 		log.fatalf("Failed to create vulkan instance: %v", res)
-		return instance, .Failed_Create_Instance
+		return
 	}
 
 	// Load the rest of the functions with our instance
@@ -360,7 +367,7 @@ build_instance :: proc(self: ^Instance_Builder) -> (instance: ^Instance, err: Er
 			&instance.debug_messenger,
 		); res != .SUCCESS {
 			log.fatalf("Failed to create debug messenger: %v", res)
-			return instance, .Failed_Create_Debug_Messenger
+			return
 		}
 	}
 
@@ -370,7 +377,7 @@ build_instance :: proc(self: ^Instance_Builder) -> (instance: ^Instance, err: Er
 	instance.instance_version = instance_version
 	instance.api_version = api_version
 
-	return
+	return instance, true
 }
 
 // Sets the name of the application. Defaults to "" if none is provided.
@@ -587,12 +594,12 @@ default_debug_callback :: proc "system" (
 	context = runtime.default_context()
 	context.logger = _logger
 
-	if message_severity == {.WARNING} {
-		log.warnf("[%v]\n%s\n", message_types, p_callback_data.pMessage)
-	} else if message_severity == {.ERROR} {
-		log.errorf("[%v]\n%s\n", message_types, p_callback_data.pMessage)
+	if .WARNING in message_severity {
+		log.warnf("[%v]: %s", message_types, p_callback_data.pMessage)
+	} else if .ERROR in message_severity {
+		log.errorf("[%v]: %s", message_types, p_callback_data.pMessage)
 	} else {
-		log.infof("[%v]\n%s\n", message_types, p_callback_data.pMessage)
+		log.infof("[%v]: %s", message_types, p_callback_data.pMessage)
 	}
 
 	return false // Applications must return false here

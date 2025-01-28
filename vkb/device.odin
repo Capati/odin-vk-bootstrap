@@ -29,7 +29,13 @@ destroy_device :: proc(self: ^Device) {
 	vk.DestroyDevice(self.ptr, self.allocation_callbacks)
 }
 
-device_get_queue_index :: proc(self: ^Device, type: Queue_Type) -> (index: u32, err: Error) {
+device_get_queue_index :: proc(
+	self: ^Device,
+	type: Queue_Type,
+) -> (
+	index: u32,
+	ok: bool,
+) #optional_ok {
 	index = vk.QUEUE_FAMILY_IGNORED
 
 	switch type {
@@ -41,29 +47,29 @@ device_get_queue_index :: proc(self: ^Device, type: Queue_Type) -> (index: u32, 
 		)
 		if index == vk.QUEUE_FAMILY_IGNORED {
 			log.error("Present queue index unavailable.")
-			return vk.QUEUE_FAMILY_IGNORED, .Present_Unavailable
+			return
 		}
 	case .Graphics:
 		index = get_first_queue_index(self.queue_families, {.GRAPHICS})
 		if index == vk.QUEUE_FAMILY_IGNORED {
 			log.error("Graphics queue index unavailable.")
-			return vk.QUEUE_FAMILY_IGNORED, .Graphics_Unavailable
+			return
 		}
 	case .Compute:
 		index = get_separate_queue_index(self.queue_families, {.COMPUTE}, {.TRANSFER})
 		if index == vk.QUEUE_FAMILY_IGNORED {
 			log.error("Compute queue index unavailable.")
-			return vk.QUEUE_FAMILY_IGNORED, .Compute_Unavailable
+			return
 		}
 	case .Transfer:
 		index = get_separate_queue_index(self.queue_families, {.TRANSFER}, {.COMPUTE})
 		if index == vk.QUEUE_FAMILY_IGNORED {
 			log.error("Transfer queue index unavailable.")
-			return vk.QUEUE_FAMILY_IGNORED, .Transfer_Unavailable
+			return
 		}
 	}
 
-	return
+	return index, true
 }
 
 device_get_dedicated_queue_index :: proc(
@@ -71,8 +77,8 @@ device_get_dedicated_queue_index :: proc(
 	type: Queue_Type,
 ) -> (
 	index: u32,
-	err: Error,
-) {
+	ok: bool,
+) #optional_ok {
 	index = vk.QUEUE_FAMILY_IGNORED
 
 	#partial switch type {
@@ -80,25 +86,32 @@ device_get_dedicated_queue_index :: proc(
 		index = get_dedicated_queue_index(self.queue_families, {.COMPUTE}, {.TRANSFER})
 		if index == vk.QUEUE_FAMILY_IGNORED {
 			log.error("Dedicated Compute queue index unavailable.")
-			return vk.QUEUE_FAMILY_IGNORED, .Compute_Unavailable
+			return
 		}
 	case .Transfer:
 		index = get_dedicated_queue_index(self.queue_families, {.TRANSFER}, {.COMPUTE})
 		if index == vk.QUEUE_FAMILY_IGNORED {
 			log.error("Dedicated Transfer queue index unavailable.")
-			return vk.QUEUE_FAMILY_IGNORED, .Transfer_Unavailable
+			return
 		}
 	case:
-		return vk.QUEUE_FAMILY_IGNORED, .Invalid_Queue_Family_Index
+		log.error("Invalid queue family index.")
+		return
 	}
 
-	return
+	return index, true
 }
 
-device_get_queue :: proc(self: ^Device, type: Queue_Type) -> (queue: vk.Queue, err: Error) {
+device_get_queue :: proc(
+	self: ^Device,
+	type: Queue_Type,
+) -> (
+	queue: vk.Queue,
+	ok: bool,
+) #optional_ok {
 	index := device_get_queue_index(self, type) or_return
 	vk.GetDeviceQueue(self.ptr, index, 0, &queue)
-	return
+	return queue, true
 }
 
 device_get_dedicated_queue :: proc(
@@ -106,9 +119,9 @@ device_get_dedicated_queue :: proc(
 	type: Queue_Type,
 ) -> (
 	queue: vk.Queue,
-	err: Error,
-) {
+	ok: bool,
+) #optional_ok {
 	index := device_get_dedicated_queue_index(self, type) or_return
 	vk.GetDeviceQueue(self.ptr, index, 0, &queue)
-	return
+	return queue, true
 }

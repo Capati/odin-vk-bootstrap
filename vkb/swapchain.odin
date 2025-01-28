@@ -1,6 +1,7 @@
 package vk_bootstrap
 
 // Packages
+import "base:runtime"
 import "core:log"
 import vk "vendor:vulkan"
 
@@ -45,41 +46,47 @@ swapchain_get_images :: proc(
 	allocator := context.allocator,
 ) -> (
 	images: []vk.Image,
-	err: Error,
-) {
+	ok: bool,
+) #optional_ok {
 	image_count: u32 = 0
 	if res := vk.GetSwapchainImagesKHR(self.device.ptr, self.ptr, &image_count, nil);
 	   res != .SUCCESS {
 		log.fatalf("Failed to get swapchain images count: [%v]", res)
-		return {}, .Failed_Get_Swapchain_Images
+		return
 	}
 
 	if image_count == 0 {
 		log.errorf("No swapchain images available!")
-		return {}, .Failed_Get_Swapchain_Images
+		return
 	}
 
-	images = make([]vk.Image, image_count, allocator) or_return
+	images = make([]vk.Image, image_count, allocator)
+	defer if !ok {
+		delete(images, allocator)
+	}
 
 	if res := vk.GetSwapchainImagesKHR(self.device.ptr, self.ptr, &image_count, raw_data(images));
 	   res != .SUCCESS {
 		log.fatalf("Failed to get swapchain images: [%v]", res)
-		return {}, .Failed_Get_Swapchain_Images
+		return
 	}
 
-	return
+	return images, true
 }
 
 // Returns a slice of vk.ImageView's to the `vk.Image`'s of the swapchain.
 swapchain_get_image_views :: proc(
 	self: ^Swapchain,
 	p_next: rawptr = nil,
+	allocator := context.allocator,
 ) -> (
 	views: []vk.ImageView,
-	err: Error,
-) {
-	images := swapchain_get_images(self) or_return
-	defer delete(images)
+	ok: bool,
+) #optional_ok {
+	ta := context.temp_allocator
+	runtime.DEFAULT_TEMP_ALLOCATOR_TEMP_GUARD(ignore = allocator == ta)
+
+	images := swapchain_get_images(self, ta) or_return
 
 	already_contains_image_view_usage := false
 	p_next := p_next
@@ -102,9 +109,10 @@ swapchain_get_image_views :: proc(
 	images_len := len(images)
 
 	// Create image views for each image
-	views = make([]vk.ImageView, images_len) or_return
-	defer if err != nil {
-		swapchain_destroy_image_views(self, &views)
+	views = make([]vk.ImageView, images_len, allocator)
+	defer if !ok {
+		swapchain_destroy_image_views(self, views)
+		delete(views, allocator)
 	}
 
 	for i in 0 ..< images_len {
@@ -140,17 +148,18 @@ swapchain_get_image_views :: proc(
 			&views[i],
 		); res != .SUCCESS {
 			log.fatalf("Failed to create swapchain image view: [%v] ", res)
-			return views, .Failed_Create_Swapchain_Image_Views
+			return
 		}
 	}
 
-	return
+	return views, true
 }
 
-swapchain_destroy_image_views :: proc(self: ^Swapchain, views: ^[]vk.ImageView) {
+swapchain_destroy_image_views :: proc(self: ^Swapchain, views: []vk.ImageView) {
 	for view, i in views {
 		if view == 0 {
 			log.warnf("Trying to destroy an invalid image view at [%d], ignoring...", i)
+			continue
 		}
 		vk.DestroyImageView(self.device.ptr, view, self.allocation_callbacks)
 	}

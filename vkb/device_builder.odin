@@ -3,7 +3,6 @@ package vk_bootstrap
 // Packages
 import "base:runtime"
 import "core:log"
-import "core:mem"
 import "core:slice"
 import vk "vendor:vulkan"
 
@@ -22,14 +21,15 @@ Custom_Queue_Description :: struct {
 	priorities: []f32,
 }
 
+@(require_results)
 init_device_builder :: proc(
 	physical_device: ^Physical_Device,
 ) -> (
 	builder: Device_Builder,
-	err: Error,
-) {
+	ok: bool,
+) #optional_ok {
 	builder.physical_device = physical_device
-	return
+	return builder, true
 }
 
 destroy_device_builder :: proc(self: ^Device_Builder) {
@@ -38,22 +38,19 @@ destroy_device_builder :: proc(self: ^Device_Builder) {
 
 // Create a `Device`. Return an error if it failed.
 @(require_results)
-build_device :: proc(self: ^Device_Builder) -> (device: ^Device, err: Error) {
+build_device :: proc(self: ^Device_Builder) -> (device: ^Device, ok: bool) #optional_ok {
 	log.info("Requesting a logical device...")
 
+	ta := context.temp_allocator
 	runtime.DEFAULT_TEMP_ALLOCATOR_TEMP_GUARD()
 
-	queue_descriptions := make([dynamic]Custom_Queue_Description, context.temp_allocator) or_return
+	queue_descriptions := make([dynamic]Custom_Queue_Description, ta)
 	append(&queue_descriptions, ..self.queue_descriptions[:])
 
 	if len(queue_descriptions) == 0 {
 		if self.has_high_priority_graphics_queue {
 			for f, index in self.physical_device.queue_families {
-				queue_priorities := make(
-					[dynamic]f32,
-					f.queueCount,
-					context.temp_allocator,
-				) or_return
+				queue_priorities := make([dynamic]f32, f.queueCount, ta)
 
 				if .GRAPHICS in f.queueFlags {
 					for &priority, i in queue_priorities {
@@ -75,7 +72,7 @@ build_device :: proc(self: ^Device_Builder) -> (device: ^Device, err: Error) {
 		}
 	}
 
-	queue_create_infos := make([dynamic]vk.DeviceQueueCreateInfo, context.temp_allocator) or_return
+	queue_create_infos := make([dynamic]vk.DeviceQueueCreateInfo, ta)
 
 	for desc in queue_descriptions {
 		queue_create_info: vk.DeviceQueueCreateInfo = {
@@ -93,8 +90,8 @@ build_device :: proc(self: ^Device_Builder) -> (device: ^Device, err: Error) {
 		[dynamic]cstring,
 		0,
 		len(self.physical_device.extensions_to_enable),
-		context.temp_allocator,
-	) or_return
+		ta,
+	)
 
 	append(&extensions_to_enable, ..self.physical_device.extensions_to_enable[:])
 
@@ -103,7 +100,7 @@ build_device :: proc(self: ^Device_Builder) -> (device: ^Device, err: Error) {
 		append(&extensions_to_enable, vk.KHR_SWAPCHAIN_EXTENSION_NAME)
 	}
 
-	final_pnext_chain := make([dynamic]^vk.BaseOutStructure, context.temp_allocator) or_return
+	final_pnext_chain := make([dynamic]^vk.BaseOutStructure, ta)
 	device_create_info: vk.DeviceCreateInfo
 
 	user_defined_phys_dev_features_2 := false
@@ -118,7 +115,7 @@ build_device :: proc(self: ^Device_Builder) -> (device: ^Device, err: Error) {
 		log.error(
 			"Vulkan physical device features 2 in pNext chain while using add required extension features",
 		)
-		return nil, .Physical_Device_Features2_In_P_Next_Chain_With_Add_Required_Extension_Features
+		return
 	}
 
 	local_features2 := vk.PhysicalDeviceFeatures2 {
@@ -160,14 +157,10 @@ build_device :: proc(self: ^Device_Builder) -> (device: ^Device, err: Error) {
 	device_create_info.enabledExtensionCount = u32(len(extensions_to_enable))
 	device_create_info.ppEnabledExtensionNames = raw_data(extensions_to_enable[:])
 
-	alloc_err: mem.Allocator_Error
-	device, alloc_err = new(Device)
-	if alloc_err != nil {
-		log.errorf("Failed to allocate a device object: [%v]", alloc_err)
-		return nil, alloc_err
-	}
-	defer if err != nil {
-		free(device);device = nil
+	device = new(Device)
+	ensure(device != nil, "Failed to allocate a device object")
+	defer if !ok {
+		free(device)
 	}
 
 	if res := vk.CreateDevice(
@@ -177,7 +170,7 @@ build_device :: proc(self: ^Device_Builder) -> (device: ^Device, err: Error) {
 		&device.ptr,
 	); res != .SUCCESS {
 		log.fatalf("Failed to create logical device: [%v]", res)
-		return device, .Failed_Create_Device
+		return
 	}
 
 	device.physical_device = self.physical_device
@@ -186,13 +179,13 @@ build_device :: proc(self: ^Device_Builder) -> (device: ^Device, err: Error) {
 	device.queue_families = make(
 		[]vk.QueueFamilyProperties,
 		len(self.physical_device.queue_families),
-	) or_return
+	)
 	copy(device.queue_families[:], self.physical_device.queue_families[:])
 
 	device.allocation_callbacks = self.allocation_callbacks
 	device.instance_version = self.physical_device.instance_version
 
-	return
+	return device, true
 }
 
 // When no custom queue description is given, use this option to make graphics queue the

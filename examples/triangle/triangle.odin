@@ -1,15 +1,13 @@
 package main
 
-// Core
+// Packages
 import "core:fmt"
 import "core:log"
 import "core:mem"
-
-// Vendor
 import sdl "vendor:sdl2"
 import vk "vendor:vulkan"
 
-// Package
+// Local packages
 import "./../../vkb"
 
 State :: struct {
@@ -48,28 +46,27 @@ General_Error :: enum {
 	Vulkan_Error,
 }
 
-Error :: union #shared_nil {
-	General_Error,
-	vkb.Error,
-}
-
 create_window_sdl :: proc(
 	window_title: cstring,
 	resize := true,
 ) -> (
 	window: ^sdl.Window,
-	err: Error,
+	ok: bool,
 ) {
 	sdl_flags := sdl.InitFlags{.VIDEO}
 	if res := sdl.Init(sdl_flags); res != 0 {
 		log.errorf("Failed to initialize SDL: [%s]", sdl.GetError())
-		return nil, .SDL_Init_Failed
+		return
 	}
-	defer if err != nil do sdl.Quit()
+	defer if !ok {
+		sdl.Quit()
+	}
 
 	window_flags: sdl.WindowFlags = {.VULKAN, .ALLOW_HIGHDPI, .SHOWN}
 
-	if resize do window_flags += {.RESIZABLE}
+	if resize {
+		window_flags += {.RESIZABLE}
+	}
 
 	window = sdl.CreateWindow(
 		window_title,
@@ -81,10 +78,10 @@ create_window_sdl :: proc(
 	)
 	if window == nil {
 		log.errorf("Failed to create a SDL window: [%s]", sdl.GetError())
-		return nil, .SDL_Init_Failed
+		return
 	}
 
-	return
+	return window, true
 }
 
 destroy_window_sdl :: proc(window: ^sdl.Window) {
@@ -92,10 +89,12 @@ destroy_window_sdl :: proc(window: ^sdl.Window) {
 	sdl.Quit()
 }
 
-device_initialization :: proc(s: ^State) -> (err: Error) {
+device_initialization :: proc(s: ^State) -> (ok: bool) {
 	// Window
 	s.window = create_window_sdl("Vulkan Triangle", true) or_return
-	defer if err != nil do destroy_window_sdl(s.window)
+	defer if !ok {
+		destroy_window_sdl(s.window)
+	}
 
 	// Instance
 	instance_builder := vkb.init_instance_builder() or_return
@@ -119,14 +118,18 @@ device_initialization :: proc(s: ^State) -> (err: Error) {
 	}
 
 	s.instance = vkb.build_instance(&instance_builder) or_return
-	defer if err != nil do vkb.destroy_instance(s.instance)
+	defer if !ok {
+		vkb.destroy_instance(s.instance)
+	}
 
 	// Surface
 	if !sdl.Vulkan_CreateSurface(s.window, s.instance.ptr, &s.surface) {
 		log.errorf("SDL couldn't create vulkan surface: %s", sdl.GetError())
 		return
 	}
-	defer if err != nil do vkb.destroy_surface(s.instance, s.surface)
+	defer if !ok {
+		vkb.destroy_surface(s.instance, s.surface)
+	}
 
 	// Physical device
 	selector := vkb.init_physical_device_selector(s.instance) or_return
@@ -136,7 +139,9 @@ device_initialization :: proc(s: ^State) -> (err: Error) {
 	vkb.selector_set_surface(&selector, s.surface)
 
 	s.physical_device = vkb.select_physical_device(&selector) or_return
-	defer if err != nil do vkb.destroy_physical_device(s.physical_device)
+	defer if !ok {
+		vkb.destroy_physical_device(s.physical_device)
+	}
 
 	// Deice
 	device_builder := vkb.init_device_builder(s.physical_device) or_return
@@ -144,10 +149,10 @@ device_initialization :: proc(s: ^State) -> (err: Error) {
 
 	s.device = vkb.build_device(&device_builder) or_return
 
-	return
+	return true
 }
 
-create_swapchain :: proc(s: ^State, width, height: u32) -> (err: vkb.Error) {
+create_swapchain :: proc(s: ^State, width, height: u32) -> (ok: bool) {
 	builder := vkb.init_swapchain_builder(s.device) or_return
 	defer vkb.destroy_swapchain_builder(&builder)
 
@@ -162,25 +167,25 @@ create_swapchain :: proc(s: ^State, width, height: u32) -> (err: vkb.Error) {
 	vkb.destroy_swapchain(s.swapchain)
 	s.swapchain = swapchain
 
-	return
+	return true
 }
 
-get_queue :: proc(s: ^State, data: ^Render_Data) -> (err: Error) {
+get_queue :: proc(s: ^State, data: ^Render_Data) -> (ok: bool) {
 	data.graphics_queue = vkb.device_get_queue(s.device, .Graphics) or_return
 	data.present_queue = vkb.device_get_queue(s.device, .Present) or_return
-	return
+	return true
 }
 
-create_render_pass :: proc(s: ^State, data: ^Render_Data) -> (err: Error) {
+create_render_pass :: proc(s: ^State, data: ^Render_Data) -> (ok: bool) {
 	color_attachment := vk.AttachmentDescription {
-		format = s.swapchain.image_format,
-		samples = {._1},
-		loadOp = .CLEAR,
-		storeOp = .STORE,
-		stencilLoadOp = .DONT_CARE,
+		format         = s.swapchain.image_format,
+		samples        = {._1},
+		loadOp         = .CLEAR,
+		storeOp        = .STORE,
+		stencilLoadOp  = .DONT_CARE,
 		stencilStoreOp = .DONT_CARE,
-		initialLayout = .UNDEFINED,
-		finalLayout = .PRESENT_SRC_KHR,
+		initialLayout  = .UNDEFINED,
+		finalLayout    = .PRESENT_SRC_KHR,
 	}
 
 	color_attachment_ref := vk.AttachmentReference {
@@ -195,11 +200,11 @@ create_render_pass :: proc(s: ^State, data: ^Render_Data) -> (err: Error) {
 	}
 
 	dependency := vk.SubpassDependency {
-		srcSubpass = vk.SUBPASS_EXTERNAL,
-		dstSubpass = 0,
-		srcStageMask = {.COLOR_ATTACHMENT_OUTPUT},
+		srcSubpass    = vk.SUBPASS_EXTERNAL,
+		dstSubpass    = 0,
+		srcStageMask  = {.COLOR_ATTACHMENT_OUTPUT},
 		srcAccessMask = {},
-		dstStageMask = {.COLOR_ATTACHMENT_OUTPUT},
+		dstStageMask  = {.COLOR_ATTACHMENT_OUTPUT},
 		dstAccessMask = {.COLOR_ATTACHMENT_READ, .COLOR_ATTACHMENT_WRITE},
 	}
 
@@ -216,19 +221,13 @@ create_render_pass :: proc(s: ^State, data: ^Render_Data) -> (err: Error) {
 	if res := vk.CreateRenderPass(s.device.ptr, &render_pass_info, nil, &data.render_pass);
 	   res != .SUCCESS {
 		log.fatalf("Failed to create render pass: [%v]", res)
-		return .Vulkan_Error
+		return
 	}
 
-	return
+	return true
 }
 
-create_shader_module :: proc(
-	s: ^State,
-	code: []u8,
-) -> (
-	shader_module: vk.ShaderModule,
-	err: Error,
-) {
+create_shader_module :: proc(s: ^State, code: []u8) -> (shader_module: vk.ShaderModule, ok: bool) {
 	vertex_module_info := vk.ShaderModuleCreateInfo {
 		sType    = .SHADER_MODULE_CREATE_INFO,
 		codeSize = len(code),
@@ -238,13 +237,13 @@ create_shader_module :: proc(
 	if res := vk.CreateShaderModule(s.device.ptr, &vertex_module_info, nil, &shader_module);
 	   res != .SUCCESS {
 		log.fatalf("failed to create shader module: [%v]", res)
-		return 0, .Vulkan_Error
+		return
 	}
 
-	return
+	return shader_module, true
 }
 
-create_graphics_pipeline :: proc(s: ^State, data: ^Render_Data) -> (err: Error) {
+create_graphics_pipeline :: proc(s: ^State, data: ^Render_Data) -> (ok: bool) {
 	// Create the modules for each shader
 	vertex_shader_code := #load("./shaders/shader_vert.spv")
 	vertex_shader_module := create_shader_module(s, vertex_shader_code) or_return
@@ -256,17 +255,17 @@ create_graphics_pipeline :: proc(s: ^State, data: ^Render_Data) -> (err: Error) 
 
 	// Create stage info for each shader
 	vertex_stage_info := vk.PipelineShaderStageCreateInfo {
-		sType = .PIPELINE_SHADER_STAGE_CREATE_INFO,
-		stage = {.VERTEX},
+		sType  = .PIPELINE_SHADER_STAGE_CREATE_INFO,
+		stage  = {.VERTEX},
 		module = vertex_shader_module,
-		pName = "main",
+		pName  = "main",
 	}
 
 	fragment_stage_info := vk.PipelineShaderStageCreateInfo {
-		sType = .PIPELINE_SHADER_STAGE_CREATE_INFO,
-		stage = {.FRAGMENT},
+		sType  = .PIPELINE_SHADER_STAGE_CREATE_INFO,
+		stage  = {.FRAGMENT},
 		module = fragment_shader_module,
-		pName = "main",
+		pName  = "main",
 	}
 
 	shader_stages := []vk.PipelineShaderStageCreateInfo{vertex_stage_info, fragment_stage_info}
@@ -320,46 +319,46 @@ create_graphics_pipeline :: proc(s: ^State, data: ^Render_Data) -> (err: Error) 
 
 	// State for rasteriser
 	rasteriser := vk.PipelineRasterizationStateCreateInfo {
-		sType = .PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
-		depthClampEnable = false,
+		sType                   = .PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
+		depthClampEnable        = false,
 		rasterizerDiscardEnable = false,
-		polygonMode = .FILL,
-		lineWidth = 1.0,
-		cullMode = {.BACK},
-		frontFace = .CLOCKWISE,
-		depthBiasEnable = false,
+		polygonMode             = .FILL,
+		lineWidth               = 1.0,
+		cullMode                = {.BACK},
+		frontFace               = .CLOCKWISE,
+		depthBiasEnable         = false,
 	}
 
 	// State for multisampling
 	multisampling := vk.PipelineMultisampleStateCreateInfo {
-		sType = .PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
-		sampleShadingEnable = false,
-		rasterizationSamples = {._1},
-		minSampleShading = 1.0,
-		pSampleMask = nil,
+		sType                 = .PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
+		sampleShadingEnable   = false,
+		rasterizationSamples  = {._1},
+		minSampleShading      = 1.0,
+		pSampleMask           = nil,
 		alphaToCoverageEnable = false,
-		alphaToOneEnable = false,
+		alphaToOneEnable      = false,
 	}
 
 	// State for colour blending
 	color_blend_attachment := vk.PipelineColorBlendAttachmentState {
-		colorWriteMask = {.R, .G, .B, .A},
-		blendEnable = true,
+		colorWriteMask      = {.R, .G, .B, .A},
+		blendEnable         = true,
 		srcColorBlendFactor = .SRC_ALPHA,
 		dstColorBlendFactor = .ONE_MINUS_SRC_ALPHA,
-		colorBlendOp = .ADD,
+		colorBlendOp        = .ADD,
 		srcAlphaBlendFactor = .ONE,
 		dstAlphaBlendFactor = .ZERO,
-		alphaBlendOp = .ADD,
+		alphaBlendOp        = .ADD,
 	}
 
 	color_blending := vk.PipelineColorBlendStateCreateInfo {
-		sType = .PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
-		logicOpEnable = false,
-		logicOp = .COPY,
+		sType           = .PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
+		logicOpEnable   = false,
+		logicOp         = .COPY,
 		attachmentCount = 1,
-		pAttachments = &color_blend_attachment,
-		blendConstants = {0.0, 0.0, 0.0, 0.0},
+		pAttachments    = &color_blend_attachment,
+		blendConstants  = {0.0, 0.0, 0.0, 0.0},
 	}
 
 	// Pipeline layout
@@ -378,7 +377,7 @@ create_graphics_pipeline :: proc(s: ^State, data: ^Render_Data) -> (err: Error) 
 		&data.pipeline_layout,
 	); res != .SUCCESS {
 		log.fatalf("Failed to create pipeline layout: [%v]", res)
-		return .Vulkan_Error
+		return
 	}
 
 	// pipeline finally
@@ -407,13 +406,13 @@ create_graphics_pipeline :: proc(s: ^State, data: ^Render_Data) -> (err: Error) 
 		&data.graphics_pipeline,
 	); res != .SUCCESS {
 		log.fatalf("Failed to create graphics pipeline: [%v]", res)
-		return .Vulkan_Error
+		return
 	}
 
-	return
+	return true
 }
 
-create_framebuffers :: proc(s: ^State, data: ^Render_Data) -> (err: Error) {
+create_framebuffers :: proc(s: ^State, data: ^Render_Data) -> (ok: bool) {
 	data.swapchain_images = vkb.swapchain_get_images(s.swapchain) or_return
 	data.swapchain_image_views = vkb.swapchain_get_image_views(s.swapchain) or_return
 
@@ -439,32 +438,34 @@ create_framebuffers :: proc(s: ^State, data: ^Render_Data) -> (err: Error) {
 			&data.frame_buffers[i],
 		); res != .SUCCESS {
 			log.fatalf("failed to create framebuffers: [%v]", res)
-			return .Vulkan_Error
+			return
 		}
 	}
 
-	return
+	return true
 }
 
-create_command_pool :: proc(s: ^State, data: ^Render_Data) -> (err: Error) {
+create_command_pool :: proc(s: ^State, data: ^Render_Data) -> (ok: bool) {
 	create_info := vk.CommandPoolCreateInfo {
-		sType = .COMMAND_POOL_CREATE_INFO,
-		flags = {.RESET_COMMAND_BUFFER},
+		sType            = .COMMAND_POOL_CREATE_INFO,
+		flags            = {.RESET_COMMAND_BUFFER},
 		queueFamilyIndex = vkb.device_get_queue_index(s.device, .Graphics) or_return,
 	}
 
 	if res := vk.CreateCommandPool(s.device.ptr, &create_info, nil, &data.command_pool);
 	   res != .SUCCESS {
 		log.fatalf("Failed to create command pool: [%v]", res)
-		return .Vulkan_Error
+		return
 	}
 
-	return
+	return true
 }
 
-create_command_buffers :: proc(s: ^State, data: ^Render_Data) -> (err: Error) {
+create_command_buffers :: proc(s: ^State, data: ^Render_Data) -> (ok: bool) {
 	data.command_buffers = make([]vk.CommandBuffer, MAX_FRAMES_IN_FLIGHT)
-	defer if err != nil do delete(data.command_buffers)
+	defer if !ok {
+		delete(data.command_buffers)
+	}
 
 	allocate_info := vk.CommandBufferAllocateInfo {
 		sType              = .COMMAND_BUFFER_ALLOCATE_INFO,
@@ -479,10 +480,10 @@ create_command_buffers :: proc(s: ^State, data: ^Render_Data) -> (err: Error) {
 		raw_data(data.command_buffers),
 	); res != .SUCCESS {
 		log.fatalf("Failed to allocate command buffers: [%v]", res)
-		return .Vulkan_Error
+		return
 	}
 
-	return
+	return true
 }
 
 record_command_buffer :: proc(
@@ -491,7 +492,7 @@ record_command_buffer :: proc(
 	buffer: vk.CommandBuffer,
 	image_index: u32,
 ) -> (
-	err: Error,
+	ok: bool,
 ) {
 	begin_info := vk.CommandBufferBeginInfo {
 		sType = .COMMAND_BUFFER_BEGIN_INFO,
@@ -500,12 +501,12 @@ record_command_buffer :: proc(
 
 	if res := vk.BeginCommandBuffer(buffer, &begin_info); res != .SUCCESS {
 		log.errorf("Failed to begin recording command buffer: [%v]", res)
-		return .Vulkan_Error
+		return
 	}
 
 	clear_color := vk.ClearValue {
-		color =  {
-			float32 =  {
+		color = {
+			float32 = {
 				0.03561436968491878157417676879363,
 				0.22713652550514897375949232016547,
 				0.65237010541082120207337791500345,
@@ -548,13 +549,13 @@ record_command_buffer :: proc(
 
 	if res := vk.EndCommandBuffer(buffer); res != .SUCCESS {
 		log.errorf("Failed to record command buffer: [%v]", res)
-		return .Vulkan_Error
+		return
 	}
 
-	return
+	return true
 }
 
-create_sync_objects :: proc(s: ^State, data: ^Render_Data) -> (err: Error) {
+create_sync_objects :: proc(s: ^State, data: ^Render_Data) -> (ok: bool) {
 	data.available_semaphores = make([]vk.Semaphore, MAX_FRAMES_IN_FLIGHT)
 	data.finished_semaphores = make([]vk.Semaphore, MAX_FRAMES_IN_FLIGHT)
 	data.in_flight_fences = make([]vk.Fence, MAX_FRAMES_IN_FLIGHT)
@@ -576,7 +577,7 @@ create_sync_objects :: proc(s: ^State, data: ^Render_Data) -> (err: Error) {
 			&data.available_semaphores[i],
 		); res != .SUCCESS {
 			log.errorf("Failed to create \"image_available\" semaphore: [%v]", res)
-			return .Vulkan_Error
+			return
 		}
 
 		if res := vk.CreateSemaphore(
@@ -586,20 +587,20 @@ create_sync_objects :: proc(s: ^State, data: ^Render_Data) -> (err: Error) {
 			&data.finished_semaphores[i],
 		); res != .SUCCESS {
 			log.errorf("Failed to create \"render_finished\" semaphore: [%v]", res)
-			return .Vulkan_Error
+			return
 		}
 
 		if res := vk.CreateFence(s.device.ptr, &fence_info, nil, &data.in_flight_fences[i]);
 		   res != .SUCCESS {
 			log.errorf("Failed to create \"in_flight\" fence: [%v]", res)
-			return .Vulkan_Error
+			return
 		}
 	}
 
-	return
+	return true
 }
 
-recreate_swapchain :: proc(s: ^State, data: ^Render_Data) -> (err: Error) {
+recreate_swapchain :: proc(s: ^State, data: ^Render_Data) -> (ok: bool) {
 	width, height: i32
 	sdl.GetWindowSize(s.window, &width, &height)
 
@@ -614,19 +615,27 @@ recreate_swapchain :: proc(s: ^State, data: ^Render_Data) -> (err: Error) {
 	}
 	delete(data.frame_buffers)
 
-	vkb.swapchain_destroy_image_views(s.swapchain, &data.swapchain_image_views)
+	vkb.swapchain_destroy_image_views(s.swapchain, data.swapchain_image_views)
 	delete(data.swapchain_images)
 	delete(data.swapchain_image_views)
 
-	if create_swapchain(s, u32(width), u32(height)) != nil do return
-	if create_framebuffers(s, data) != nil do return
-	if create_command_pool(s, data) != nil do return
-	if create_command_buffers(s, data) != nil do return
+	if !create_swapchain(s, u32(width), u32(height)) {
+		return
+	}
+	if !create_framebuffers(s, data) {
+		return
+	}
+	if !create_command_pool(s, data) {
+		return
+	}
+	if !create_command_buffers(s, data) {
+		return
+	}
 
-	return
+	return true
 }
 
-draw_frame :: proc(s: ^State, data: ^Render_Data) -> (err: Error) {
+draw_frame :: proc(s: ^State, data: ^Render_Data) -> (ok: bool) {
 	vk.WaitForFences(s.device.ptr, 1, &data.in_flight_fences[data.current_frame], true, max(u64))
 	vk.ResetFences(s.device.ptr, 1, &data.in_flight_fences[data.current_frame])
 
@@ -642,7 +651,7 @@ draw_frame :: proc(s: ^State, data: ^Render_Data) -> (err: Error) {
 		return recreate_swapchain(s, data)
 	} else if res != .SUCCESS && res != .SUBOPTIMAL_KHR {
 		log.errorf("Failed to acquire swap chain image: [%v]", res)
-		return .Vulkan_Error
+		return
 	}
 
 	vk.ResetCommandBuffer(data.command_buffers[data.current_frame], {})
@@ -669,7 +678,7 @@ draw_frame :: proc(s: ^State, data: ^Render_Data) -> (err: Error) {
 		data.in_flight_fences[data.current_frame],
 	); res != .SUCCESS {
 		log.errorf("failed to submit draw command buffer: [%v]", res)
-		return .Vulkan_Error
+		return
 	}
 
 	swapchains := []vk.SwapchainKHR{s.swapchain.ptr}
@@ -687,7 +696,7 @@ draw_frame :: proc(s: ^State, data: ^Render_Data) -> (err: Error) {
 		return recreate_swapchain(s, data)
 	} else if res != .SUCCESS {
 		log.errorf("failed to present swapchain image: [%v]", res)
-		return .Vulkan_Error
+		return
 	}
 
 	// When `MAX_FRAMES_IN_FLIGHT` is a power of 2 you can update the current frame without modulo
@@ -695,7 +704,7 @@ draw_frame :: proc(s: ^State, data: ^Render_Data) -> (err: Error) {
 	data.current_frame = (data.current_frame + 1) & (MAX_FRAMES_IN_FLIGHT - 1)
 	// data.current_frame = (data.current_frame + 1) % MAX_FRAMES_IN_FLIGHT
 
-	return
+	return true
 }
 
 cleanup :: proc(s: ^State, data: ^Render_Data) {
@@ -732,7 +741,7 @@ cleanup :: proc(s: ^State, data: ^Render_Data) {
 	vk.DestroyPipelineLayout(s.device.ptr, data.pipeline_layout, nil)
 	vk.DestroyRenderPass(s.device.ptr, data.render_pass, nil)
 
-	vkb.swapchain_destroy_image_views(s.swapchain, &data.swapchain_image_views)
+	vkb.swapchain_destroy_image_views(s.swapchain, data.swapchain_image_views)
 	delete(data.swapchain_image_views)
 
 	vkb.destroy_swapchain(s.swapchain)
@@ -771,19 +780,37 @@ main :: proc() {
 	state: State
 	render_data: Render_Data
 
-	if device_initialization(&state) != nil do return
+	if !device_initialization(&state) {
+		return
+	}
 
 	width, height: i32
 	sdl.GetWindowSize(state.window, &width, &height)
-	if create_swapchain(&state, u32(width), u32(height)) != nil do return
+	if !create_swapchain(&state, u32(width), u32(height)) {
+		return
+	}
 
-	if get_queue(&state, &render_data) != nil do return
-	if create_render_pass(&state, &render_data) != nil do return
-	if create_graphics_pipeline(&state, &render_data) != nil do return
-	if create_framebuffers(&state, &render_data) != nil do return
-	if create_command_pool(&state, &render_data) != nil do return
-	if create_command_buffers(&state, &render_data) != nil do return
-	if create_sync_objects(&state, &render_data) != nil do return
+	if !get_queue(&state, &render_data) {
+		return
+	}
+	if !create_render_pass(&state, &render_data) {
+		return
+	}
+	if !create_graphics_pipeline(&state, &render_data) {
+		return
+	}
+	if !create_framebuffers(&state, &render_data) {
+		return
+	}
+	if !create_command_pool(&state, &render_data) {
+		return
+	}
+	if !create_command_buffers(&state, &render_data) {
+		return
+	}
+	if !create_sync_objects(&state, &render_data) {
+		return
+	}
 
 	main_loop: for {
 		e: sdl.Event
@@ -814,12 +841,14 @@ main :: proc() {
 		}
 
 		if !state.is_minimized {
-			if res := draw_frame(&state, &render_data); res != nil {
-				log.errorf("Failed to draw frame: [%v]", res)
+			if ok := draw_frame(&state, &render_data); !ok {
+				log.errorf("Failed to draw frame.")
 				break main_loop
 			}
 		}
 	}
 
 	cleanup(&state, &render_data)
+
+	log.info("Exiting...")
 }

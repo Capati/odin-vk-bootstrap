@@ -54,8 +54,8 @@ init_physical_device_selector :: proc(
 	instance: ^Instance,
 ) -> (
 	pd_selector: Physical_Device_Selector,
-	err: Error,
-) {
+	ok: bool,
+) #optional_ok {
 	pd_selector = Physical_Device_Selector {
 		instance_info = Instance_Info {
 			instance = instance.ptr,
@@ -82,7 +82,7 @@ init_physical_device_selector :: proc(
 		},
 	}
 
-	return
+	return pd_selector, true
 }
 
 destroy_physical_device_selector :: proc(self: ^Physical_Device_Selector) {
@@ -105,17 +105,18 @@ select_physical_device :: proc(
 	selection: Device_Selection_Mode = .Partially_And_Fully_Suitable,
 ) -> (
 	physical_device: ^Physical_Device,
-	err: Error,
-) {
+	ok: bool,
+) #optional_ok {
 	log.info("Selecting a physical device...")
 
+	ta := context.temp_allocator
 	runtime.DEFAULT_TEMP_ALLOCATOR_TEMP_GUARD()
 
-	selected_devices := selector_select_impl(self, selection, context.temp_allocator) or_return
+	selected_devices := selector_select_impl(self, selection, ta) or_return
 
 	if len(selected_devices) == 0 {
 		log.errorf("No suitable physical devices are found")
-		return nil, .No_Physical_Devices_Found
+		return
 	}
 
 	defer if len(selected_devices) > 1 {
@@ -130,7 +131,7 @@ select_physical_device :: proc(
 
 	log.infof("Selected physical device: %s", physical_device.name)
 
-	return
+	return physical_device, true
 }
 
 selector_select_impl :: proc(
@@ -139,11 +140,11 @@ selector_select_impl :: proc(
 	allocator: mem.Allocator,
 ) -> (
 	physical_devices: [dynamic]^Physical_Device,
-	err: Error,
-) {
+	ok: bool,
+) #optional_ok {
 	physical_devices.allocator = allocator
 
-	defer if err != nil {
+	defer if !ok {
 		for &pd in physical_devices {
 			destroy_physical_device(pd)
 		}
@@ -152,7 +153,7 @@ selector_select_impl :: proc(
 	if (self.criteria.require_present && !self.criteria.defer_surface_initialization) {
 		if (self.instance_info.surface == 0) {
 			log.errorf("Present is required, but no surface is provided.")
-			return {}, .No_Surface_Provided
+			return
 		}
 	}
 
@@ -164,21 +165,18 @@ selector_select_impl :: proc(
 		nil,
 	); res != .SUCCESS {
 		log.errorf("Failed to enumerate physical devices count: [%v]", res)
-		return {}, .Failed_Enumerate_Physical_Devices
+		return
 	}
 
 	if physical_device_count == 0 {
 		log.errorf("No physical device with Vulkan support detected.")
-		return {}, .No_Physical_Devices_Found
+		return
 	}
 
-	runtime.DEFAULT_TEMP_ALLOCATOR_TEMP_GUARD(ignore = allocator == context.temp_allocator)
+	ta := context.temp_allocator
+	runtime.DEFAULT_TEMP_ALLOCATOR_TEMP_GUARD(ignore = allocator == ta)
 
-	vk_physical_devices := make(
-		[]vk.PhysicalDevice,
-		physical_device_count,
-		context.temp_allocator,
-	) or_return
+	vk_physical_devices := make([]vk.PhysicalDevice, physical_device_count, ta)
 
 	if res := vk.EnumeratePhysicalDevices(
 		self.instance_info.instance,
@@ -186,14 +184,14 @@ selector_select_impl :: proc(
 		raw_data(vk_physical_devices),
 	); res != .SUCCESS {
 		log.errorf("Failed to enumerate physical devices: [%v]", res)
-		return physical_devices, .Failed_Enumerate_Physical_Devices
+		return
 	}
 
 	fill_out_phys_dev_with_criteria :: proc(
 		self: ^Physical_Device_Selector,
 		physical_device: ^Physical_Device,
 	) -> (
-		err: Error,
+		ok: bool,
 	) {
 		physical_device.features = self.criteria.required_features
 		portability_ext_available := false
@@ -213,7 +211,7 @@ selector_select_impl :: proc(
 
 		append(&physical_device.extensions_to_enable, ..self.criteria.required_extensions[:])
 
-		return
+		return true
 	}
 
 	// if this option is set, always return only the first physical device found
@@ -286,7 +284,7 @@ selector_select_impl :: proc(
 			vk_pd,
 			&self.criteria.extended_features_chain,
 		) or_return
-		pd.suitable = device_selector_is_device_suitable(self, pd) or_return
+		pd.suitable = device_selector_is_device_suitable(self, pd)
 
 		if pd.suitable != .No {
 			fill_out_phys_dev_with_criteria(self, pd) or_return
@@ -315,23 +313,15 @@ selector_select_impl :: proc(
 
 	if pd_total == 0 {
 		log.error("No suitable device found")
-		return physical_devices, .No_Suitable_Device
-	}
-
-	if pd_total == 1 {
 		return
 	}
 
-	fully_supported := make(
-		[dynamic]^Physical_Device,
-		fully_supported_count,
-		context.temp_allocator,
-	) or_return
-	partial_supported := make(
-		[dynamic]^Physical_Device,
-		partial_supported_count,
-		context.temp_allocator,
-	) or_return
+	if pd_total == 1 {
+		return physical_devices, true
+	}
+
+	fully_supported := make([dynamic]^Physical_Device, fully_supported_count, ta)
+	partial_supported := make([dynamic]^Physical_Device, partial_supported_count, ta)
 
 	// Sort into fully and partially suitable devices
 	for &pd, i in physical_devices {
@@ -364,7 +354,7 @@ selector_select_impl :: proc(
 		}
 	}
 
-	return
+	return physical_devices, true
 }
 
 selector_populate_device_details :: proc(
@@ -373,16 +363,12 @@ selector_populate_device_details :: proc(
 	src_extended_features_chain: ^[dynamic]Generic_Feature,
 ) -> (
 	pd: ^Physical_Device,
-	err: Error,
-) {
-	alloc_err: mem.Allocator_Error
-	pd, alloc_err = new(Physical_Device)
-	if alloc_err != nil {
-		log.errorf("Failed to allocate a physical device object: [%v]", alloc_err)
-		return nil, alloc_err
-	}
-	defer if err != nil {
-		free(pd);pd = nil
+	ok: bool,
+) #optional_ok {
+	pd = new(Physical_Device)
+	ensure(pd != nil, "Failed to allocate a physical device object")
+	defer if !ok {
+		free(pd)
 	}
 
 	pd.ptr = vk_physical_device
@@ -405,17 +391,17 @@ selector_populate_device_details :: proc(
 
 	if queue_family_count == 0 {
 		log.errorf("[%s] No queue family properties found", pd.name)
-		return pd, .Queue_Family_Properties_Empty
+		return
 	}
 
-	pd.queue_families = make([]vk.QueueFamilyProperties, int(queue_family_count)) or_return
+	pd.queue_families = make([]vk.QueueFamilyProperties, int(queue_family_count))
 
 	vk.GetPhysicalDeviceQueueFamilyProperties(
 		vk_physical_device,
 		&queue_family_count,
 		raw_data(pd.queue_families),
 	)
-	defer if err != nil {
+	defer if !ok {
 		delete(pd.queue_families)
 	}
 
@@ -428,12 +414,12 @@ selector_populate_device_details :: proc(
 	if res := vk.EnumerateDeviceExtensionProperties(vk_physical_device, nil, &property_count, nil);
 	   res != .SUCCESS {
 		log.errorf("Failed to enumerate device extensions properties count: [%s]", res)
-		return pd, .Failed_Enumerate_Physical_Device_Extensions
+		return
 	}
 
 	if property_count == 0 {
 		log.errorf("[%s] No device extension properties found", pd.name)
-		return pd, .Failed_Enumerate_Physical_Device_Extensions
+		return
 	}
 
 	pd.available_extensions = make([]vk.ExtensionProperties, property_count)
@@ -445,9 +431,9 @@ selector_populate_device_details :: proc(
 		raw_data(pd.available_extensions),
 	); res != .SUCCESS {
 		log.errorf("Failed to enumerate device extensions properties: [%s]", res)
-		return pd, .Failed_Enumerate_Physical_Device_Extensions
+		return
 	}
-	defer if err != nil {
+	defer if !ok {
 		delete(pd.available_extensions)
 	}
 
@@ -477,7 +463,7 @@ selector_populate_device_details :: proc(
 		}
 	}
 
-	return
+	return pd, true
 }
 
 device_selector_is_device_suitable :: proc(
@@ -485,14 +471,13 @@ device_selector_is_device_suitable :: proc(
 	pd: ^Physical_Device,
 ) -> (
 	suitable: Physical_Device_Suitable,
-	err: Error,
 ) {
 	suitable = .Yes
 
 	// Check if physical device name match criteria
 	if self.criteria.name != "" && self.criteria.name != pd.name {
 		log.warnf("[%s] is not the required [%s], ignoring...", pd.name, self.criteria.name)
-		return .No, nil
+		return .No
 	}
 
 	if self.criteria.required_version > pd.properties.apiVersion {
@@ -501,7 +486,7 @@ device_selector_is_device_suitable :: proc(
 			pd.name,
 			self.criteria.required_version,
 		)
-		return .No, nil
+		return .No
 	}
 
 	dedicated_compute :=
@@ -526,39 +511,37 @@ device_selector_is_device_suitable :: proc(
 
 	if self.criteria.require_dedicated_compute_queue && !dedicated_compute {
 		log.warnf("[%s] does not support dedicated compute queue, ignoring...", pd.name)
-		return .No, nil
+		return .No
 	}
 
 	if self.criteria.require_dedicated_transfer_queue && !dedicated_transfer {
 		log.warnf("[%s] does not support transfer compute queue, ignoring...", pd.name)
-		return .No, nil
+		return .No
 	}
 
 	if self.criteria.require_separate_compute_queue && !separate_compute {
 		log.warnf("[%s] does not support separate compute queue, ignoring...", pd.name)
-		return .No, nil
+		return .No
 	}
 
 	if self.criteria.require_separate_transfer_queue && !separate_transfer {
 		log.warnf("[%s] does not support separate transfer queue, ignoring...", pd.name)
-		return .No, nil
+		return .No
 	}
 
 	if self.criteria.require_present &&
 	   !present_queue &&
 	   !self.criteria.defer_surface_initialization {
 		log.warnf("[%s] has no present queue, ignoring...", pd.name)
-		return .No, nil
+		return .No
 	}
-
-	runtime.DEFAULT_TEMP_ALLOCATOR_TEMP_GUARD()
 
 	if !check_device_extension_support(
 		&pd.available_extensions,
 		self.criteria.required_extensions[:],
 	) {
 		log.warnf("[%s] is missing required extensions, ignoring...", pd.name)
-		return .No, nil
+		return .No
 	}
 
 	if !self.criteria.defer_surface_initialization && self.criteria.require_present {
@@ -575,11 +558,11 @@ device_selector_is_device_suitable :: proc(
 				pd.name,
 				res,
 			)
-			return .No, nil
+			return .No
 		}
 
 		if format_count == 0 {
-			return .No, nil
+			return .No
 		}
 
 		// Supported present modes
@@ -595,12 +578,12 @@ device_selector_is_device_suitable :: proc(
 				pd.name,
 				res,
 			)
-			return .No, nil
+			return .No
 		}
 
 		if present_mode_count == 0 {
 			log.warnf("[%s] has no present modes, ignoring...", pd.name)
-			return .No, nil
+			return .No
 		}
 	}
 
@@ -621,7 +604,7 @@ device_selector_is_device_suitable :: proc(
 		&self.criteria.extended_features_chain,
 	) {
 		log.warnf("[%s] is missing required features support, ignoring...", pd.name)
-		return .No, nil
+		return .No
 	}
 
 	// Check required memory size
@@ -633,12 +616,12 @@ device_selector_is_device_suitable :: proc(
 					pd.name,
 					self.criteria.required_mem_size,
 				)
-				return .No, nil
+				return .No
 			}
 		}
 	}
 
-	return suitable, nil
+	return
 }
 
 // Set the surface in which the physical device should render to.
