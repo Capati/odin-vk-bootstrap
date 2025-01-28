@@ -1,8 +1,10 @@
 # Odin vk-bootstrap
 
-Inspired by [vk-bootstrap](https://github.com/charles-lunarg/vk-bootstrap/tree/main) for C++, this is a utility library in [Odin Language](https://odin-lang.org/) that jump starts initialization of Vulkan.
+Inspired by [vk-bootstrap][] for C++, this is a utility library in [Odin Language][] that jump
+starts initialization of Vulkan.
 
-Read the [Getting Started](./docs/getting_started.md) guide for a quick start on using `odin-vk-bootstrap`
+Read the [Getting Started](./docs/getting_started.md) guide for a quick start on using
+`odin-vk-bootstrap`
 
 ## Basic Usage
 
@@ -14,8 +16,10 @@ import vk "vendor:vulkan"
 
 main :: proc() {
     // Start by creating a new instance builder
-    instance_builder, instance_builder_err := vkb.init_instance_builder()
-    if instance_builder_err != nil do return
+    instance_builder, instance_builder_ok := vkb.init_instance_builder()
+    if !instance_builder_ok {
+        return
+    }
     defer vkb.destroy_instance_builder(&instance_builder)
 
     // Require the minimum Vulkan api version 1.1
@@ -29,13 +33,17 @@ main :: proc() {
         vkb.instance_use_default_debug_messenger(&instance_builder)
     }
 
-    instance, instance_err := vkb.build_instance(&instance_builder)
-    if instance_err != nil do return
+    instance, instance_ok := vkb.build_instance(&instance_builder)
+    if !instance_ok {
+        return
+    }
     defer vkb.destroy_instance(instance)
 
     // Create a new physical device selector
-    selector, selector_err := vkb.init_physical_device_selector(instance)
-    if selector_err != nil do return
+    selector, selector_ok := vkb.init_physical_device_selector(instance)
+    if !selector_ok {
+        return
+    }
     defer vkb.destroy_selection_criteria(&selector)
 
     // We want a GPU that can render to current Window surface
@@ -45,27 +53,39 @@ main :: proc() {
     vkb.selector_set_minimum_version(&selector, vk.API_VERSION_1_1)
 
     // Try to select a suitable device
-    physical_device, physical_device_err := vkb.select_physical_device(&selector)
-    if physical_device_err != nil do return
+    physical_device, physical_device_ok := vkb.select_physical_device(&selector)
+    if !physical_device_ok {
+        return
+    }
 
     // In Vulkan you don't need to destroy a physical device, but here you need
     // to free some resources when the physical device was created.
     defer vkb.destroy_physical_device(physical_device)
 
     // Create a device builder
-    device_builder, device_builder_err := vkb.init_device_builder(physical_device)
-    if device_builder_err != nil do return
+    device_builder, device_builder_ok := vkb.init_device_builder(physical_device)
+    if !device_builder_ok {
+        return
+    }
     defer vkb.destroy_device_builder(&device_builder)
 
     // Automatically propagate needed data from instance & physical device
-    device, device_err := vkb.build_device(&device_builder)
-    if device_err != nil do return
+    device, device_ok := vkb.build_device(&device_builder)
+    if !device_ok {
+        return
+    }
     defer vkb.destroy_device(device)
 
     // Get the graphics queue with a helper function
-    graphics_queue, graphics_queue_err := vkb.device_get_queue(device, .Graphics)
-    if graphics_queue_err != nil do return
+    graphics_queue, graphics_queue_ok := vkb.device_get_queue(device, .Graphics)
+    if !graphics_queue_ok {
+        return
+    }
 }
 ```
 
-See [Triangle Example](./examples//triangle//triangle.odin) for an example that renders a triangle to the screen.
+See [Triangle Example](./examples//triangle//triangle.odin) for an example that renders a triangle
+to the screen.
+
+[Odin Language]: https://odin-lang.org/
+[vk-bootstrap]: https://github.com/charles-lunarg/vk-bootstrap/tree/main
