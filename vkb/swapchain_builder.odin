@@ -27,6 +27,7 @@ Swapchain_Builder :: struct {
 	clipped:                  bool,
 	old_swapchain:            vk.SwapchainKHR,
 	allocation_callbacks:     ^vk.AllocationCallbacks,
+	initialized:              bool,
 }
 
 Buffer_Mode :: enum u32 {
@@ -185,7 +186,15 @@ build_swapchain :: proc(
 	swapchain: ^Swapchain,
 	ok: bool,
 ) #optional_ok {
-	log.info("Building swapchain...")
+	if self.old_swapchain != 0 {
+		self.initialized = true
+	}
+
+	if self.initialized {
+		log.info("Rebuilding swapchain...")
+	} else {
+		log.info("Building swapchain...")
+	}
 
 	if self.surface == 0 {
 		log.error("Swapchain requires a surface handle")
@@ -252,9 +261,11 @@ build_swapchain :: proc(
 		&desired_formats,
 	)
 
-	log.infof("Image count: [%d]", image_count)
-	log.infof("Selected surface format: [%v]", surface_format.format)
-	log.infof("Selected surface color space: [%v]", surface_format.colorSpace)
+	if !self.initialized {
+		log.infof("Image count: [%d]", image_count)
+		log.infof("Selected surface format: [%v]", surface_format.format)
+		log.infof("Selected surface color space: [%v]", surface_format.colorSpace)
+	}
 
 	extent := swapchain_builder_utils_find_extent(
 		surface_support.capabilities,
@@ -264,11 +275,13 @@ build_swapchain :: proc(
 
 	image_array_layers := self.array_layer_count
 	if surface_support.capabilities.maxImageArrayLayers < self.array_layer_count {
-		log.warnf(
-			"Requested image array layers [%d] is greater than supported max image array layers [%d], defaulting to maximum value...",
-			image_array_layers,
-			surface_support.capabilities.maxImageArrayLayers,
-		)
+		if !self.initialized {
+			log.warnf(
+				"Requested image array layers [%d] is greater than supported max image array layers [%d], defaulting to maximum value...",
+				image_array_layers,
+				surface_support.capabilities.maxImageArrayLayers,
+			)
+		}
 		image_array_layers = surface_support.capabilities.maxImageArrayLayers
 	}
 	if (self.array_layer_count == 0) {
@@ -285,7 +298,9 @@ build_swapchain :: proc(
 		&desired_present_modes,
 	)
 
-	log.infof("Selected present mode: [%v]", present_mode)
+	if !self.initialized {
+		log.infof("Selected present mode: [%v]", present_mode)
+	}
 
 	// vk.SurfaceCapabilitiesKHR.supportedUsageFlags is only valid for some present modes. For
 	// shared present modes, we should also check
@@ -342,7 +357,9 @@ build_swapchain :: proc(
 		swapchain_create_info.imageSharingMode = .EXCLUSIVE
 	}
 
-	log.infof("Image sharing mode: [%v]", swapchain_create_info.imageSharingMode)
+	if !self.initialized {
+		log.infof("Image sharing mode: [%v]", swapchain_create_info.imageSharingMode)
+	}
 
 	swapchain_create_info.preTransform = pre_transform
 	swapchain_create_info.compositeAlpha = self.composite_alpha
@@ -380,6 +397,8 @@ build_swapchain :: proc(
 	swapchain.image_count = cast(u32)len(images)
 	swapchain.instance_version = self.instance_version
 	swapchain.allocation_callbacks = self.allocation_callbacks
+
+	self.initialized = true
 
 	return swapchain, true
 }
