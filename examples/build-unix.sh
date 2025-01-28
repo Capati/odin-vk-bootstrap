@@ -1,12 +1,7 @@
 #!/bin/bash
 
-OUTPUT_DIR=examples/build
+OUTPUT_DIR=build
 EXECUTABLE_NAME=triangle_debug
-
-# Ensure build folder exists
-if [ ! -d $OUTPUT_DIR ]; then
-    mkdir $OUTPUT_DIR
-fi
 
 # Build and run command
 cmd=$1
@@ -15,7 +10,7 @@ if [ -z "$cmd" ]; then
     cmd=build
 fi
 
-odin build ./examples/triangle \
+odin build ./triangle \
     -debug \
     -vet \
     -strict-style \
