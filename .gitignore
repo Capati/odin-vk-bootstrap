@@ -1,20 +1,38 @@
 # Build
-
-/examples/build/*
-!/examples/build/assets/
-!/examples/build/SDL2.dll
-
-# Bin
-
+*.lib
+*.dll
+*.pdb
+*.a
+*.dylib
+*.exe
+*.so
+*.obj
 *.o
+*.exp
+*.ilk
+*.res
+*.manifest
 
-# Sublime Text
+# Build directories, keep .gitkeep
+**/build/*
+!**/build/.gitkeep
 
+# IDE/Editor
+/.vscode
 *.sublime-workspace
+*.code-workspace
+.idea/
+*.swp
+*.swo
 
-# vs code
+# Logs and temp
+/tmp
+*.log
 
-/.vscode/*.log
+# OS
+**/.DS_Store
+Thumbs.db
+desktop.ini
 
-# Odin
+# Project specific
 ols.json
