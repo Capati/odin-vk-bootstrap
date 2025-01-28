@@ -49,7 +49,7 @@ Preferred_Device_Type :: enum {
 	CPU,
 }
 
-// Requires a `Instance` to construct, needed to pass instance creation info.
+/* Requires a `Instance` to construct, needed to pass instance creation info. */
 init_physical_device_selector :: proc(
 	instance: ^Instance,
 ) -> (
@@ -97,8 +97,11 @@ Device_Selection_Mode :: enum {
 	Only_Fully_Suitable,
 }
 
-// Return the first device which is suitable.
-// Use the `selection` parameter to configure if partially.
+/*
+Return the first device which is suitable.
+
+Use the `selection` parameter to configure if partially.
+ */
 @(require_results)
 select_physical_device :: proc(
 	self: ^Physical_Device_Selector,
@@ -624,18 +627,21 @@ device_selector_is_device_suitable :: proc(
 	return
 }
 
-// Set the surface in which the physical device should render to.
-// Be sure to set it if swapchain functionality is to be used.
+/*
+Set the surface in which the physical device should render to.
+
+Be sure to set it if swapchain functionality is to be used.
+*/
 selector_set_surface :: proc(self: ^Physical_Device_Selector, surface: vk.SurfaceKHR) {
 	self.instance_info.surface = surface
 }
 
-// Set the name of the device to select.
+/* Set the name of the device to select. */
 selector_set_name :: proc(self: ^Physical_Device_Selector, name: string) {
 	self.criteria.name = name
 }
 
-// Set the desired physical device type to select. Defaults to `PreferredDeviceType.Discrete`.
+/* Set the desired physical device type to select. Defaults to `PreferredDeviceType.Discrete`. */
 selector_prefer_gpu_device_type :: proc(
 	self: ^Physical_Device_Selector,
 	type: Preferred_Device_Type = .Discrete,
@@ -643,8 +649,10 @@ selector_prefer_gpu_device_type :: proc(
 	self.criteria.preferred_type = type
 }
 
-// Allow selection of a gpu device type that isn't the preferred physical device type.
-// Defaults to true.
+/*
+Allow selection of a gpu device type that isn't the preferred physical device type.
+Defaults to true.
+*/
 selector_allow_any_gpu_device_type :: proc(
 	self: ^Physical_Device_Selector,
 	allow_any_type: bool = true,
@@ -652,32 +660,32 @@ selector_allow_any_gpu_device_type :: proc(
 	self.criteria.allow_any_type = allow_any_type
 }
 
-// Require that a physical device supports presentation. Defaults to true.
+/* Require that a physical device supports presentation. Defaults to true. */
 selector_require_present :: proc(self: ^Physical_Device_Selector, required: bool = true) {
 	self.criteria.require_present = required
 }
 
-// Require a queue family that supports compute operations but not graphics nor transfer.
+/* Require a queue family that supports compute operations but not graphics nor transfer. */
 selector_require_dedicated_compute_queue :: proc(self: ^Physical_Device_Selector) {
 	self.criteria.require_dedicated_compute_queue = true
 }
 
-// Require a queue family that supports transfer operations but not graphics nor compute.
+/* Require a queue family that supports transfer operations but not graphics nor compute. */
 selector_require_dedicated_transfer_queue :: proc(self: ^Physical_Device_Selector) {
 	self.criteria.require_dedicated_transfer_queue = true
 }
 
-// Require a queue family that supports compute operations but not graphics.
+/* Require a queue family that supports compute operations but not graphics. */
 selector_require_separate_compute_queue :: proc(self: ^Physical_Device_Selector) {
 	self.criteria.require_separate_compute_queue = true
 }
 
-// Require a queue family that supports transfer operations but not graphics.
+/* Require a queue family that supports transfer operations but not graphics. */
 selector_require_separate_transfer_queue :: proc(self: ^Physical_Device_Selector) {
 	self.criteria.require_separate_transfer_queue = true
 }
 
-// Require a memory heap from VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT with `size` memory available.
+/* Require a memory heap from VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT with `size` memory available. */
 selector_required_device_memory_size :: proc(
 	self: ^Physical_Device_Selector,
 	size: vk.DeviceSize,
@@ -685,19 +693,19 @@ selector_required_device_memory_size :: proc(
 	self.criteria.required_mem_size = size
 }
 
-// Require a physical device which supports a specific extension.
+/* Require a physical device which supports a specific extension. */
 selector_add_required_extension :: proc(self: ^Physical_Device_Selector, extension: cstring) {
 	append(&self.criteria.required_extensions, extension)
 }
 
-// Require a physical device which supports a set of extensions.
+/* Require a physical device which supports a set of extensions. */
 selector_add_required_extensions :: proc(self: ^Physical_Device_Selector, extensions: ^[]cstring) {
 	for ext in extensions {
 		append(&self.criteria.required_extensions, ext)
 	}
 }
 
-// Require a physical device which supports a set of extensions by count.
+/* Require a physical device which supports a set of extensions by count. */
 selector_add_required_extensions_count :: proc(
 	self: ^Physical_Device_Selector,
 	count: uint,
@@ -711,21 +719,26 @@ selector_add_required_extensions_count :: proc(
 	}
 }
 
-// Require a physical device that supports a `major` and `minor` version of vulkan.
-// Should be constructed with `vk.MAKE_VERSION` or `vk.API_VERSION_X_X`.
+/*
+Require a physical device that supports a `major` and `minor` version of vulkan.
+
+Should be constructed with `vk.MAKE_VERSION` or `vk.API_VERSION_X_X`.
+*/
 selector_set_minimum_version :: proc(self: ^Physical_Device_Selector, version: u32) {
 	major := version >> 22 & 0xFF
 	minor := version >> 12 & 0xFF
 	self.criteria.required_version = vk.MAKE_VERSION(major, minor, 0)
 }
 
-// By default PhysicalDeviceSelector enables the portability subset if available
-// This function disables that behavior
+/*
+By default PhysicalDeviceSelector enables the portability subset if available
+This function disables that behavior
+*/
 selector_disable_portability_subset :: proc(self: ^Physical_Device_Selector) {
 	self.criteria.enable_portability_subset = false
 }
 
-// Require a physical device which supports the features in `vk.PhysicalDeviceFeatures`.
+/* Require a physical device which supports the features in `vk.PhysicalDeviceFeatures`. */
 selector_set_required_features :: proc(
 	self: ^Physical_Device_Selector,
 	features: vk.PhysicalDeviceFeatures,
@@ -733,17 +746,24 @@ selector_set_required_features :: proc(
 	self.criteria.required_features = features
 }
 
-// Require a physical device which supports a specific set of general/extension features.
-// If this function is used, the user should not put their own `vk.PhysicalDeviceFeatures2` in
-// the `pNext` chain of `vk.DeviceCreateInfo`.
+/*
+Require a physical device which supports a specific set of general/extension features.
+
+If this function is used, the user should not put their own `vk.PhysicalDeviceFeatures2` in
+the `pNext` chain of `vk.DeviceCreateInfo`.
+*/
 selector_add_required_extension_features :: proc(self: ^Physical_Device_Selector, feature: $T) {
 	feature := feature
 	generic := create_generic_features(&feature)
 	append(&self.criteria.extended_features_chain, generic)
 }
 
-// Require a physical device which supports the features in VkPhysicalDeviceVulkan11Features.
-// Must have vulkan version 1.2 - This is due to the VkPhysicalDeviceVulkan11Features struct being added in 1.2, not 1.1
+/*
+Require a physical device which supports the features in `vk.PhysicalDeviceVulkan11Features`.
+
+Must have vulkan version 1.2 - This is due to the `vk.PhysicalDeviceVulkan11Features` struct being
+added in 1.2, not 1.1.
+ */
 selector_set_required_features_11 :: proc(
 	self: ^Physical_Device_Selector,
 	features_11: vk.PhysicalDeviceVulkan11Features,
@@ -753,8 +773,11 @@ selector_set_required_features_11 :: proc(
 	selector_add_required_extension_features(self, features_11)
 }
 
-// Require a physical device which supports the features in VkPhysicalDeviceVulkan12Features.
-// Must have vulkan version 1.2
+/*
+Require a physical device which supports the features in `vk.PhysicalDeviceVulkan12Features`.
+
+Must have vulkan version 1.2.
+*/
 selector_set_required_features_12 :: proc(
 	self: ^Physical_Device_Selector,
 	features_12: vk.PhysicalDeviceVulkan12Features,
@@ -764,8 +787,11 @@ selector_set_required_features_12 :: proc(
 	selector_add_required_extension_features(self, features_12)
 }
 
-// Require a physical device which supports the features in VkPhysicalDeviceVulkan13Features.
-// Must have vulkan version 1.3
+/*
+Require a physical device which supports the features in `vk.PhysicalDeviceVulkan13Features`.
+
+Must have vulkan version 1.3.
+*/
 selector_set_required_features_13 :: proc(
 	self: ^Physical_Device_Selector,
 	features_13: vk.PhysicalDeviceVulkan13Features,
@@ -789,13 +815,21 @@ selector_set_required_features_14 :: proc(
 	selector_add_required_extension_features(self, features_14)
 }
 
+/*
+Used when surface creation happens after physical device selection.
+
+**Warning**: This disables checking if the physical device supports a given surface.
+*/
 selector_defer_surface_initialization :: proc(self: ^Physical_Device_Selector) {
 	self.criteria.defer_surface_initialization = true
 }
 
-// Ignore all criteria and choose the first physical device that is available.
-// Only use when: The first gpu in the list may be set by global user preferences and an
-// application may wish to respect it.
+/*
+Ignore all criteria and choose the first physical device that is available.
+
+Only use when: The first gpu in the list may be set by global user preferences and an
+application may wish to respect it.
+*/
 selector_select_first_device_unconditionally :: proc(
 	self: ^Physical_Device_Selector,
 	unconditionally: bool = true,

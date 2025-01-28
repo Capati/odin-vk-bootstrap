@@ -5,9 +5,11 @@ import "base:runtime"
 import "core:log"
 import vk "vendor:vulkan"
 
-// Gathers useful information about the available vulkan capabilities, like layers and instance
-// extensions. Use this for enabling features conditionally, ie if you would like an extension but
-// can use a fallback if it isn't supported but need to know if support is available first.
+/*
+Gathers useful information about the available vulkan capabilities, like layers and instance
+extensions. Use this for enabling features conditionally, ie if you would like an extension but
+can use a fallback if it isn't supported but need to know if support is available first.
+*/
 System_Info :: struct {
 	available_layers:            []vk.LayerProperties,
 	available_extensions:        []vk.ExtensionProperties,
@@ -15,10 +17,10 @@ System_Info :: struct {
 	debug_utils_available:       bool,
 }
 
-// VK_LAYER_KHRONOS_validation
+/* VK_LAYER_KHRONOS_validation */
 VALIDATION_LAYER_NAME :: "VK_LAYER_KHRONOS_validation"
 
-// Get information about the available vulkan capabilities.
+/* Get information about the available vulkan capabilities. */
 get_system_info :: proc() -> (info: System_Info, ok: bool) #optional_ok {
 	layer_count: u32
 	if res := vk.EnumerateInstanceLayerProperties(&layer_count, nil); res != .SUCCESS {
@@ -139,7 +141,7 @@ destroy_system_info :: proc(self: ^System_Info) {
 	delete(self.available_extensions)
 }
 
-// Returns true if a layer is available.
+/* Returns true if a layer is available. */
 is_layer_available :: proc(self: ^System_Info, layer_name: cstring) -> bool {
 	if layer_name == nil {
 		return false
@@ -147,7 +149,7 @@ is_layer_available :: proc(self: ^System_Info, layer_name: cstring) -> bool {
 	return check_layer_supported(&self.available_layers, layer_name)
 }
 
-// Returns true if an extension is available.
+/* Returns true if an extension is available. */
 is_extension_available :: proc(self: ^System_Info, ext_name: cstring) -> bool {
 	if ext_name == nil {
 		return false

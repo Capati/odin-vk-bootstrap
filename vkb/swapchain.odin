@@ -40,7 +40,7 @@ destroy_swapchain :: proc(self: ^Swapchain) {
 	}
 }
 
-// Returns a slice of `vk.Image` handles to the swapchain.
+/* Returns a slice of `vk.Image` handles to the swapchain. */
 swapchain_get_images :: proc(
 	self: ^Swapchain,
 	allocator := context.allocator,
@@ -74,7 +74,7 @@ swapchain_get_images :: proc(
 	return images, true
 }
 
-// Returns a slice of vk.ImageView's to the `vk.Image`'s of the swapchain.
+/* Returns a slice of vk.ImageView's to the `vk.Image`'s of the swapchain. */
 swapchain_get_image_views :: proc(
 	self: ^Swapchain,
 	p_next: rawptr = nil,

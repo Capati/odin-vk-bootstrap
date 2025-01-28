@@ -3,9 +3,11 @@ package vk_bootstrap
 // Packages
 import vk "vendor:vulkan"
 
-// Finds the first queue which supports the desired operations.
-//
-// Returns `vk.QUEUE_FAMILY_IGNORED` if none is found.
+/*
+Finds the first queue which supports the desired operations.
+
+Returns `vk.QUEUE_FAMILY_IGNORED` if none is found.
+ */
 get_first_queue_index :: proc(
 	families: []vk.QueueFamilyProperties,
 	desired_flags: vk.QueueFlags,
@@ -21,11 +23,12 @@ get_first_queue_index :: proc(
 	return index
 }
 
-// Finds the queue which is separate from the graphics queue and has the desired flag and
-// not the  undesired flag, but will select it if no better options are available compute
-// support.
-//
-// Returns `vk.QUEUE_FAMILY_IGNORED` if none is found.
+/*
+Finds the queue which is separate from the graphics queue and has the desired flag and not the
+undesired flag, but will select it if no better options are available compute support.
+
+Returns `vk.QUEUE_FAMILY_IGNORED` if none is found.
+ */
 get_separate_queue_index :: proc(
 	families: []vk.QueueFamilyProperties,
 	desired_flags: vk.QueueFlags,
@@ -52,9 +55,11 @@ get_separate_queue_index :: proc(
 	return index
 }
 
-// Finds the first queue which supports only the desired flag (not graphics or transfer).
-//
-// Returns `vk.QUEUE_FAMILY_IGNORED` if none is found.
+/*
+Finds the first queue which supports only the desired flag (not graphics or transfer).
+
+Returns `vk.QUEUE_FAMILY_IGNORED` if none is found.
+ */
 get_dedicated_queue_index :: proc(
 	families: []vk.QueueFamilyProperties,
 	desired_flags: vk.QueueFlags,
@@ -79,9 +84,11 @@ get_dedicated_queue_index :: proc(
 	return vk.QUEUE_FAMILY_IGNORED
 }
 
-// Finds the first queue which supports presenting.
-//
-// Returns `vk.QUEUE_FAMILY_IGNORED` if none is found.
+/*
+Finds the first queue which supports presenting.
+
+Returns `vk.QUEUE_FAMILY_IGNORED` if none is found.
+ */
 get_present_queue_index :: proc(
 	families: []vk.QueueFamilyProperties,
 	vk_physical_device: vk.PhysicalDevice,

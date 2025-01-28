@@ -7,7 +7,7 @@ import "core:mem"
 import "core:reflect"
 import vk "vendor:vulkan"
 
-// Assuming the total of bits from any extension feature.
+/* Assuming the total of bits from any extension feature. */
 FEATURES_BITS_FIELDS_CAPACITY :: 256
 
 Generic_Feature :: struct {
@@ -27,7 +27,7 @@ create_generic_features :: proc(features: ^$T) -> (v: Generic_Feature) {
 	return
 }
 
-// Check if all `requested` extension features bits is available.
+/* Check if all `requested` extension features bits is available. */
 generic_features_match :: proc(
 	requested: ^Generic_Feature,
 	supported: ^Generic_Feature,

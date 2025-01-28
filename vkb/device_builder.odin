@@ -15,7 +15,7 @@ Device_Builder :: struct {
 	allocation_callbacks:             ^vk.AllocationCallbacks,
 }
 
-// For advanced device queue setup.
+/* For advanced device queue setup. */
 Custom_Queue_Description :: struct {
 	index:      u32,
 	priorities: []f32,
@@ -36,7 +36,7 @@ destroy_device_builder :: proc(self: ^Device_Builder) {
 	delete(self.p_next_chain)
 }
 
-// Create a `Device`. Return an error if it failed.
+/* Create a `Device`. Return an error if it failed. */
 @(require_results)
 build_device :: proc(self: ^Device_Builder) -> (device: ^Device, ok: bool) #optional_ok {
 	log.info("Requesting a logical device...")
@@ -188,15 +188,19 @@ build_device :: proc(self: ^Device_Builder) -> (device: ^Device, ok: bool) #opti
 	return device, true
 }
 
-// When no custom queue description is given, use this option to make graphics queue the
-// priority from others queue.
+/*
+When no custom queue description is given, use this option to make graphics queue the
+priority from others queue.
+*/
 device_builder_graphics_queue_has_priority :: proc(self: ^Device_Builder, priority: bool = true) {
 	self.has_high_priority_graphics_queue = priority
 }
 
-// For Advanced Users: specify the exact list of `vk.DeviceQueueCreateInfo`'s needed for the
-// application. If a custom queue setup is provided, getting the queues and queue indexes
-// is up to the application.
+/*
+For Advanced Users: specify the exact list of `vk.DeviceQueueCreateInfo`'s needed for the
+application. If a custom queue setup is provided, getting the queues and queue indexes is up to the
+application.
+*/
 device_builder_custom_queue_setup :: proc(
 	self: ^Device_Builder,
 	queue_descriptions: []Custom_Queue_Description,
@@ -204,13 +208,15 @@ device_builder_custom_queue_setup :: proc(
 	self.queue_descriptions = queue_descriptions
 }
 
-// Add a structure to the pNext chain of `vk.DeviceCreateInfo`.
-// The structure must be valid when `device_builder_build()` is called.
+/*
+Add a structure to the pNext chain of `vk.DeviceCreateInfo`. The structure must be valid when
+`device_builder_build()` is called.
+*/
 device_builder_add_p_next :: proc(self: ^Device_Builder, structure: ^$T) {
 	append(&self.p_next_chain, cast(^vk.BaseOutStructure)structure)
 }
 
-// Provide custom allocation callbacks.
+/* Provide custom allocation callbacks. */
 device_builder_set_allocation_callbacks :: proc(
 	self: ^Device_Builder,
 	callbacks: ^vk.AllocationCallbacks,

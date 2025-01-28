@@ -42,11 +42,7 @@ destroy_physical_device :: proc(self: ^Physical_Device) {
 	}
 }
 
-// init_physical_device :: proc() -> (pd: Physical_Device, err: Error) {
-// 	return
-// }
-
-// Has a queue family that supports compute operations but not graphics nor transfer.
+/* Has a queue family that supports compute operations but not graphics nor transfer. */
 physical_device_has_dedicated_compute_queue :: proc(self: ^Physical_Device) -> (result: bool) {
 	result =
 		get_dedicated_queue_index(self.queue_families, {.COMPUTE}, {.TRANSFER}) !=
@@ -54,7 +50,7 @@ physical_device_has_dedicated_compute_queue :: proc(self: ^Physical_Device) -> (
 	return
 }
 
-// Has a queue family that supports transfer operations but not graphics nor compute.
+/* Has a queue family that supports transfer operations but not graphics nor compute. */
 physical_device_has_dedicated_transfer_queue :: proc(self: ^Physical_Device) -> (result: bool) {
 	result =
 		get_dedicated_queue_index(self.queue_families, {.TRANSFER}, {.COMPUTE}) !=
@@ -62,7 +58,7 @@ physical_device_has_dedicated_transfer_queue :: proc(self: ^Physical_Device) -> 
 	return
 }
 
-// Has a queue family that supports transfer operations but not graphics.
+/* Has a queue family that supports transfer operations but not graphics. */
 physical_device_has_separate_compute_queue :: proc(self: ^Physical_Device) -> (result: bool) {
 	result =
 		get_separate_queue_index(self.queue_families, {.COMPUTE}, {.TRANSFER}) !=
@@ -70,7 +66,7 @@ physical_device_has_separate_compute_queue :: proc(self: ^Physical_Device) -> (r
 	return
 }
 
-// Has a queue family that supports transfer operations but not graphics.
+/* Has a queue family that supports transfer operations but not graphics. */
 physical_device_has_separate_transfer_queue :: proc(self: ^Physical_Device) -> (result: bool) {
 	result =
 		get_separate_queue_index(self.queue_families, {.TRANSFER}, {.COMPUTE}) !=
@@ -78,24 +74,24 @@ physical_device_has_separate_transfer_queue :: proc(self: ^Physical_Device) -> (
 	return
 }
 
-// Advanced: Get the `vk.QueueFamilyProperties` of the device if special queue setup is needed.
+/* Advanced: Get the `vk.QueueFamilyProperties` of the device if special queue setup is needed. */
 physical_device_get_queue_families :: proc(self: ^Physical_Device) -> []vk.QueueFamilyProperties {
 	return self.queue_families
 }
 
-// Query the list of extensions which should be enabled.
+/* Query the list of extensions which should be enabled. */
 physical_device_get_extensions :: proc(self: ^Physical_Device) -> [dynamic]cstring {
 	return self.extensions_to_enable
 }
 
-// Query the list of extensions which the physical device supports.
+/* Query the list of extensions which the physical device supports. */
 physical_device_get_available_extensions :: proc(
 	self: ^Physical_Device,
 ) -> []vk.ExtensionProperties {
 	return self.available_extensions
 }
 
-// Returns true if an extension should be enabled on the device.
+/* Returns true if an extension should be enabled on the device. */
 physical_device_is_extension_present :: proc(self: ^Physical_Device, extension: cstring) -> bool {
 	for &ext in &self.available_extensions {
 		if cstring(&ext.extensionName[0]) == extension {
@@ -105,8 +101,11 @@ physical_device_is_extension_present :: proc(self: ^Physical_Device, extension: 
 	return false
 }
 
-// If the given extension is present, make the extension be enabled on the device.
-// Returns true the extension is present.
+/*
+If the given extension is present, make the extension be enabled on the device
+
+Returns true the extension is present.
+*/
 physical_device_enable_extension_if_present :: proc(
 	self: ^Physical_Device,
 	extension: cstring,
@@ -123,8 +122,11 @@ physical_device_enable_extension_if_present :: proc(
 	return false
 }
 
-// If all the given extensions are present, make all the extensions be enabled on the device.
-// Returns `true` if all the extensions are present.
+/*
+If all the given extensions are present, make all the extensions be enabled on the device.
+
+Returns `true` if all the extensions are present.
+*/
 physical_device_enable_extensions_if_present :: proc(
 	self: ^Physical_Device,
 	extensions: []cstring,
@@ -150,7 +152,7 @@ physical_device_enable_extensions_if_present :: proc(
 }
 
 
-// Get the supported sample counts.
+/* Get the supported sample counts. */
 physical_device_get_supported_sample_counts :: proc(
 	self: ^Physical_Device,
 ) -> vk.SampleCountFlags {
@@ -160,7 +162,7 @@ physical_device_get_supported_sample_counts :: proc(
 	)
 }
 
-// Get the max supported MSAA.
+/* Get the max supported MSAA. */
 physical_device_get_max_msaa :: proc(self: ^Physical_Device) -> vk.SampleCountFlag {
 	supported_sample_counts := physical_device_get_supported_sample_counts(self)
 

@@ -13,14 +13,14 @@ Instance :: struct {
 	api_version:             u32,
 }
 
-// Destroy the surface created from this instance.
+/* Destroy the surface created from this instance. */
 destroy_surface :: proc(self: ^Instance, surface: vk.SurfaceKHR) {
 	if self != nil && self.ptr != nil && surface != 0 {
 		vk.DestroySurfaceKHR(self.ptr, surface, self.allocation_callbacks)
 	}
 }
 
-// Destroy the instance and the debug messenger.
+/* Destroy the instance and the debug messenger. */
 destroy_instance :: proc(self: ^Instance) {
 	if self == nil {
 		return

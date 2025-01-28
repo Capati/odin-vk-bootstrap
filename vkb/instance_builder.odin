@@ -46,7 +46,7 @@ Instance_Builder :: struct {
 
 _logger: log.Logger
 
-// Create an `Instance_Builder` with some defaults.
+/* Create an `Instance_Builder` with some defaults. */
 init_instance_builder :: proc() -> (builder: Instance_Builder, ok: bool) #optional_ok {
 	_logger = context.logger
 
@@ -61,7 +61,7 @@ init_instance_builder :: proc() -> (builder: Instance_Builder, ok: bool) #option
 	return builder, true
 }
 
-// Destroy the `Instance_Builder` and internal data.
+/* Destroy the `Instance_Builder` and internal data. */
 destroy_instance_builder :: proc(self: ^Instance_Builder) {
 	delete(self.layers)
 	delete(self.extensions)
@@ -71,7 +71,7 @@ destroy_instance_builder :: proc(self: ^Instance_Builder) {
 	destroy_system_info(&self.info)
 }
 
-// Create a `VkInstance`. Return an error if it failed.
+/* Create a `VkInstance`. Return an error if it failed. */
 @(require_results)
 build_instance :: proc(self: ^Instance_Builder) -> (instance: ^Instance, ok: bool) {
 	log.info("Building instance...")
@@ -380,63 +380,69 @@ build_instance :: proc(self: ^Instance_Builder) -> (instance: ^Instance, ok: boo
 	return instance, true
 }
 
-// Sets the name of the application. Defaults to "" if none is provided.
+/* Sets the name of the application. Defaults to "" if none is provided. */
 instance_set_app_name :: proc(self: ^Instance_Builder, app_name: string = "") {
 	self.app_name = app_name
 }
 
-// Sets the name of the engine. Defaults to "" if none is provided.
+/* Sets the name of the engine. Defaults to "" if none is provided. */
 instance_set_engine_name :: proc(self: ^Instance_Builder, engine_name: string = "") {
 	self.engine_name = engine_name
 }
 
-// Sets the version of the application.
-// Should be constructed with `vk.MAKE_VERSION`.
+/* Sets the version of the application. Should be constructed with `vk.MAKE_VERSION`. */
 instance_set_app_version :: proc(self: ^Instance_Builder, app_version: u32) {
 	self.application_version = app_version
 }
 
-// Sets the (`major`, `minor`, `patch`) version of the application.
+/* Sets the (`major`, `minor`, `patch`) version of the application. */
 instance_set_app_versioned :: proc(self: ^Instance_Builder, major, minor, patch: u32) {
 	self.application_version = vk.MAKE_VERSION(major, minor, patch)
 }
 
-// Sets the version of the engine.
-// Should be constructed with `vk.MAKE_VERSION`.
+/*  Sets the version of the engine. Should be constructed with `vk.MAKE_VERSION`. */
 instance_set_engine_version :: proc(self: ^Instance_Builder, engine_version: u32) {
 	self.engine_version = engine_version
 }
 
-// Sets the (`major`, `minor`, `patch`) version of the engine.
+/* Sets the (`major`, `minor`, `patch`) version of the engine. */
 instance_set_engine_versioned :: proc(self: ^Instance_Builder, major, minor, patch: u32) {
 	self.engine_version = vk.MAKE_VERSION(major, minor, patch)
 }
 
-// Require a vulkan API version. Will fail to create if this version isn't available.
-// Should be constructed with `vk.MAKE_VERSION`.
+/*
+Require a vulkan API version. Will fail to create if this version isn't available. Should be
+constructed with `vk.MAKE_VERSION`.
+*/
 instance_require_api_version :: proc(self: ^Instance_Builder, required_api_version: u32) {
 	self.required_api_version = required_api_version
 }
 
-// Sets the (`major`, `minor`, `patch`) of the required api version.
+/* Sets the (`major`, `minor`, `patch`) of the required api version. */
 instance_require_api_versioned :: proc(self: ^Instance_Builder, major, minor, patch: u32) {
 	self.required_api_version = vk.MAKE_VERSION(major, minor, patch)
 }
 
-// Overrides required API version for instance creation.
-// Will fail to create if this version isn't available.
-// Should be constructed with `vk.MAKE_VERSION` or `vk.API_VERSION_X_X`.
+/*
+Overrides required API version for instance creation. Should be constructed with `vk.MAKE_VERSION`
+or `vk.API_VERSION_X_X`.
+
+Will fail to create if this version isn't available.
+*/
 instance_set_minimum_version :: proc(self: ^Instance_Builder, minimum_instance_version: u32) {
 	self.minimum_instance_version = minimum_instance_version
 }
 
-// Sets the (`major`, `minor`, `patch`) of the minimum instance version.
+/* Sets the (`major`, `minor`, `patch`) of the minimum instance version. */
 instance_set_minimum_versioned :: proc(self: ^Instance_Builder, major, minor, patch: u32) {
 	self.minimum_instance_version = vk.MAKE_VERSION(major, minor, patch)
 }
 
-// Adds a layer to be enabled.
-// Will fail to create an instance if the layer isn't available.
+/*
+Adds a layer to be enabled.
+
+Will fail to create an instance if the layer isn't available.
+*/
 instance_enable_layer :: proc(self: ^Instance_Builder, layer_name: cstring) {
 	if layer_name == nil {
 		return
@@ -445,8 +451,11 @@ instance_enable_layer :: proc(self: ^Instance_Builder, layer_name: cstring) {
 	append(&self.layers, layer_name)
 }
 
-// Adds an extension to be enabled.
-// Will fail to create an instance if the extension isn't available.
+/*
+Adds an extension to be enabled.
+
+Will fail to create an instance if the extension isn't available.
+*/
 instance_enable_extension :: proc(self: ^Instance_Builder, extension_name: cstring) {
 	if extension_name == nil {
 		return
@@ -455,14 +464,20 @@ instance_enable_extension :: proc(self: ^Instance_Builder, extension_name: cstri
 	append(&self.extensions, extension_name)
 }
 
-// Adds the extensions to be enabled.
-// Will fail to create an instance if the extension isn't available.
+/*
+Adds the extensions to be enabled.
+
+Will fail to create an instance if the extension isn't available.
+ */
 instance_enable_extensions :: proc(self: ^Instance_Builder, extensions: []cstring) {
 	append(&self.extensions, ..extensions)
 }
 
-// Adds the extensions to be enabled.
-// Will fail to create an instance if the extension isn't available.
+/*
+Adds the extensions to be enabled.
+
+Will fail to create an instance if the extension isn't available.
+*/
 instance_enable_extensions_count :: proc(
 	self: ^Instance_Builder,
 	count: uint,
@@ -476,8 +491,11 @@ instance_enable_extensions_count :: proc(
 	}
 }
 
-// Enables the validation layers.
-// Will fail to create an instance if the validation layers aren't available.
+/*
+Enables the validation layers.
+
+Will fail to create an instance if the validation layers aren't available.
+*/
 instance_enable_validation_layers :: proc(
 	self: ^Instance_Builder,
 	require_validation: bool = true,
@@ -485,7 +503,7 @@ instance_enable_validation_layers :: proc(
 	self.enable_validation_layers = require_validation
 }
 
-// Checks if the validation layers are available and loads them if they are.
+/* Checks if the validation layers are available and loads them if they are. */
 instance_request_validation_layers :: proc(
 	self: ^Instance_Builder,
 	request_validation: bool = true,
@@ -493,13 +511,13 @@ instance_request_validation_layers :: proc(
 	self.request_validation_layers = request_validation
 }
 
-// Use a default debug callback that prints to standard out.
+/* Use a default debug callback that prints to standard out. */
 instance_use_default_debug_messenger :: proc(self: ^Instance_Builder) {
 	self.use_debug_messenger = true
 	self.debug_callback = default_debug_callback
 }
 
-// Provide a user defined debug callback.
+/* Provide a user defined debug callback. */
 instance_set_debug_callback :: proc(
 	self: ^Instance_Builder,
 	callback: vk.ProcDebugUtilsMessengerCallbackEXT,
@@ -508,7 +526,7 @@ instance_set_debug_callback :: proc(
 	self.debug_callback = callback
 }
 
-// Sets the void* to use in the debug messenger - only useful with a custom callback
+/* Sets the void* to use in the debug messenger - only useful with a custom callback */
 instance_set_debug_callback_user_data_pointer :: proc(
 	self: ^Instance_Builder,
 	user_data_pointer: rawptr,
@@ -516,7 +534,7 @@ instance_set_debug_callback_user_data_pointer :: proc(
 	self.debug_user_data_pointer = user_data_pointer
 }
 
-// Set what message severity is needed to trigger the callback.
+/* Set what message severity is needed to trigger the callback. */
 instance_set_debug_messenger_severity :: proc(
 	self: ^Instance_Builder,
 	severity: vk.DebugUtilsMessageSeverityFlagsEXT,
@@ -524,7 +542,7 @@ instance_set_debug_messenger_severity :: proc(
 	self.debug_message_severity = severity
 }
 
-// Add a message severity to the list that triggers the callback.
+/* Add a message severity to the list that triggers the callback. */
 instance_add_debug_messenger_severity :: proc(
 	self: ^Instance_Builder,
 	severity: vk.DebugUtilsMessageSeverityFlagsEXT,
@@ -532,7 +550,7 @@ instance_add_debug_messenger_severity :: proc(
 	self.debug_message_severity += severity
 }
 
-// Set what message type triggers the callback.
+/* Set what message type triggers the callback. */
 instance_set_debug_messenger_type :: proc(
 	self: ^Instance_Builder,
 	type: vk.DebugUtilsMessageTypeFlagsEXT,
@@ -540,7 +558,7 @@ instance_set_debug_messenger_type :: proc(
 	self.debug_message_type = type
 }
 
-// Add a message type to the list of that triggers the callback.
+/* Add a message type to the list of that triggers the callback. */
 instance_add_debug_messenger_type :: proc(
 	self: ^Instance_Builder,
 	type: vk.DebugUtilsMessageTypeFlagsEXT,
@@ -548,17 +566,17 @@ instance_add_debug_messenger_type :: proc(
 	self.debug_message_type += type
 }
 
-// Headless mode does not load the required extensions for presentation. Defaults to true.
+/* Headless mode does not load the required extensions for presentation. Defaults to true. */
 instance_set_headless :: proc(self: ^Instance_Builder, headless: bool = true) {
 	self.headless_context = headless
 }
 
-// Disable some validation checks.
+/* Disable some validation checks. */
 instance_add_validation_disable :: proc(self: ^Instance_Builder, check: vk.ValidationCheckEXT) {
 	append(&self.disabled_validation_checks, check)
 }
 
-// Enables optional parts of the validation layers.
+/* Enables optional parts of the validation layers. */
 instance_add_validation_feature_enable :: proc(
 	self: ^Instance_Builder,
 	enable: vk.ValidationFeatureEnableEXT,
@@ -566,7 +584,7 @@ instance_add_validation_feature_enable :: proc(
 	append(&self.enabled_validation_features, enable)
 }
 
-// Disables sections of the validation layers.
+/* Disables sections of the validation layers. */
 instance_add_validation_feature_disable :: proc(
 	self: ^Instance_Builder,
 	disable: vk.ValidationFeatureDisableEXT,
@@ -574,7 +592,7 @@ instance_add_validation_feature_disable :: proc(
 	append(&self.disabled_validation_features, disable)
 }
 
-// Provide custom allocation callbacks.
+/* Provide custom allocation callbacks. */
 instance_set_allocation_callbacks :: proc(
 	self: ^Instance_Builder,
 	callbacks: ^vk.AllocationCallbacks,
@@ -582,9 +600,12 @@ instance_set_allocation_callbacks :: proc(
 	self.allocation_callbacks = callbacks
 }
 
-// Default debug messenger.
-// Feel free to copy-paste it into your own code, change it as needed, then call
-//  `instance_set_debug_callback()` to use that instead.
+/*
+Default debug messenger.
+
+Feel free to copy-paste it into your own code, change it as needed, then call
+`instance_set_debug_callback()` to use that instead.
+*/
 default_debug_callback :: proc "system" (
 	message_severity: vk.DebugUtilsMessageSeverityFlagsEXT,
 	message_types: vk.DebugUtilsMessageTypeFlagsEXT,
