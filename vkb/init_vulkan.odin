@@ -42,7 +42,7 @@ init :: proc() {
 			// modern versions of macOS don't search /usr/local/lib automatically contrary to what
 			// man dlopen says Vulkan SDK uses this as the system-wide installation location, so
 			// we're going to fallback to this if all else fails
-			if !lib && !found_lib_path {
+			if !loaded && !found_lib_path {
 				g_module, loaded = dynlib.load_library("/usr/local/lib/libvulkan.dylib")
 			}
 		}
