@@ -585,12 +585,28 @@ instance_add_validation_feature_enable :: proc(
 	append(&self.enabled_validation_features, enable)
 }
 
+/* Enables optional parts of the validation layers. */
+instance_add_validation_feature_enable_slice :: proc(
+	self: ^Instance_Builder,
+	enable: []vk.ValidationFeatureEnableEXT,
+) {
+	append(&self.enabled_validation_features, ..enable)
+}
+
 /* Disables sections of the validation layers. */
 instance_add_validation_feature_disable :: proc(
 	self: ^Instance_Builder,
 	disable: vk.ValidationFeatureDisableEXT,
 ) {
 	append(&self.disabled_validation_features, disable)
+}
+
+/* Disables sections of the validation layers. */
+instance_add_validation_feature_disable_slice :: proc(
+	self: ^Instance_Builder,
+	disable: []vk.ValidationFeatureDisableEXT,
+) {
+	append(&self.disabled_validation_features, ..disable)
 }
 
 /* Provide custom allocation callbacks. */
