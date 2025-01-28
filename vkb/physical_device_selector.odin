@@ -775,8 +775,20 @@ selector_set_required_features_13 :: proc(
 	selector_add_required_extension_features(self, features_13)
 }
 
-// Used when surface creation happens after physical device selection.
-// Warning: This disables checking if the physical device supports a given surface.
+/*
+Require a physical device which supports the features in `vk.PhysicalDeviceVulkan14Features`.
+
+Must have vulkan version 1.4.
+*/
+selector_set_required_features_14 :: proc(
+	self: ^Physical_Device_Selector,
+	features_14: vk.PhysicalDeviceVulkan14Features,
+) {
+	features_14 := features_14
+	features_14.sType = .PHYSICAL_DEVICE_VULKAN_1_4_FEATURES
+	selector_add_required_extension_features(self, features_14)
+}
+
 selector_defer_surface_initialization :: proc(self: ^Physical_Device_Selector) {
 	self.criteria.defer_surface_initialization = true
 }
