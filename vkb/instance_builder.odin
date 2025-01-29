@@ -44,11 +44,13 @@ Instance_Builder :: struct {
 	info:                         System_Info,
 }
 
-_logger: log.Logger
+g_logger: log.Logger
 
 /* Create an `Instance_Builder` with some defaults. */
 init_instance_builder :: proc() -> (builder: Instance_Builder, ok: bool) #optional_ok {
-	_logger = context.logger
+	if g_logger.data == nil {
+		g_logger = context.logger
+	}
 
 	builder.minimum_instance_version = vk.API_VERSION_1_0
 	builder.required_api_version = vk.API_VERSION_1_0
@@ -649,7 +651,7 @@ default_debug_callback :: proc "system" (
 	p_user_data: rawptr,
 ) -> b32 {
 	context = runtime.default_context()
-	context.logger = _logger
+	context.logger = g_logger
 
 	if .WARNING in message_severity {
 		log.warnf("[%v]: %s", message_types, p_callback_data.pMessage)
