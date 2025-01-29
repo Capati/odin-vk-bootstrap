@@ -50,10 +50,13 @@ _logger: log.Logger
 init_instance_builder :: proc() -> (builder: Instance_Builder, ok: bool) #optional_ok {
 	_logger = context.logger
 
+	builder.minimum_instance_version = vk.API_VERSION_1_0
 	builder.required_api_version = vk.API_VERSION_1_0
-	builder.debug_callback = default_debug_callback
 	builder.debug_message_severity = {.WARNING, .ERROR}
 	builder.debug_message_type = {.GENERAL, .VALIDATION, .PERFORMANCE}
+	builder.application_version = vk.MAKE_VERSION(1, 0, 0)
+	builder.engine_version = vk.MAKE_VERSION(1, 0, 0)
+	builder.debug_callback = default_debug_callback
 
 	// Get supported layers and extensions
 	builder.info = get_system_info() or_return
@@ -71,51 +74,64 @@ destroy_instance_builder :: proc(self: ^Instance_Builder) {
 	destroy_system_info(&self.info)
 }
 
-/* Create a `VkInstance`. Return an error if it failed. */
+/*
+Create a `VkInstance`.
+
+Returns:
+- instance: The vkb `Instance`.
+- ok: `true` on success or `false` if an error occurred.
+*/
 @(require_results)
-build_instance :: proc(self: ^Instance_Builder) -> (instance: ^Instance, ok: bool) {
+build_instance :: proc(self: ^Instance_Builder) -> (instance: ^Instance, ok: bool) #optional_ok {
 	log.info("Building instance...")
 
-	// Current supported instance version
-	instance_version := cast(u32)vk.API_VERSION_1_0
+	// Initialize with base version
+	api_version: u32 = vk.API_VERSION_1_0
 
-	// Check instance version support
-	if (self.minimum_instance_version > vk.API_VERSION_1_0 ||
-		   self.required_api_version > vk.API_VERSION_1_0) {
+	// Ensure minimum version
+	self.minimum_instance_version = max(vk.API_VERSION_1_0, self.minimum_instance_version)
+	self.required_api_version = max(vk.API_VERSION_1_0, self.required_api_version)
 
-		if res := vk.EnumerateInstanceVersion(&instance_version); res != .SUCCESS {
-			log.error("Vulkan version unavailable")
+	// Get system's supported version
+	instance_version: u32
+	if res := vk.EnumerateInstanceVersion(&instance_version); res != .SUCCESS {
+		log.error(
+			"Failed to query instance version. Vulkan may not be supported on this system",
+		)
+		return
+	}
+
+	// Determine desired API version based on priority
+	if self.required_api_version > vk.API_VERSION_1_0 {
+		api_version = self.required_api_version
+	} else if self.minimum_instance_version > vk.API_VERSION_1_0 {
+		api_version = self.minimum_instance_version
+	}
+
+	// Check if we meet minimum requirements wheen need more than 1.0
+	if api_version > vk.API_VERSION_1_0 {
+		if instance_version < self.minimum_instance_version ||
+		   instance_version < self.required_api_version {
+			log.errorf(
+				"Vulkan version %d.%d.%d not available (minimum required: %d.%d.%d)",
+				VK_VERSION_MAJOR(instance_version),
+				VK_VERSION_MINOR(instance_version),
+				VK_VERSION_PATCH(instance_version),
+				VK_VERSION_MAJOR(api_version),
+				VK_VERSION_MINOR(api_version),
+				VK_VERSION_PATCH(api_version),
+			)
 			return
 		}
-
-		if (instance_version < self.minimum_instance_version ||
-			   (self.minimum_instance_version == 0 &&
-					   instance_version < self.required_api_version)) {
-			if VK_VERSION_MINOR(self.required_api_version) == 4 {
-				log.error("Vulkan version 1.4 unavailable")
-				return
-			} else if VK_VERSION_MINOR(self.required_api_version) == 3 {
-				log.error("Vulkan version 1.3 unavailable")
-				return
-			} else if VK_VERSION_MINOR(self.required_api_version) == 2 {
-				log.error("Vulkan version 1.2 unavailable")
-				return
-			} else if (VK_VERSION_MINOR(self.required_api_version) == 1) {
-				log.error("Vulkan version 1.1 unavailable")
-				return
-			} else {
-				log.error("Vulkan version unavailable")
-				return
-			}
-		}
 	}
 
-	api_version := instance_version
-	if self.required_api_version > vk.API_VERSION_1_1 {
-		api_version = self.required_api_version
-	}
-
-	log.infof(
+	log.debugf(
+		"Instance version: [%d.%d.%d]",
+		VK_VERSION_MAJOR(instance_version),
+		VK_VERSION_MINOR(instance_version),
+		VK_VERSION_PATCH(instance_version),
+	)
+	log.debugf(
 		"Selected API version: [%d.%d.%d]",
 		VK_VERSION_MAJOR(api_version),
 		VK_VERSION_MINOR(api_version),

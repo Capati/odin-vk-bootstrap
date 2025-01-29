@@ -484,10 +484,21 @@ device_selector_is_device_suitable :: proc(
 	}
 
 	if self.criteria.required_version > pd.properties.apiVersion {
+		supported_major := VK_VERSION_MAJOR(pd.properties.apiVersion)
+		supported_minor := VK_VERSION_MINOR(pd.properties.apiVersion)
+		supported_patch := VK_VERSION_PATCH(pd.properties.apiVersion)
+		required_major := VK_VERSION_MAJOR(self.criteria.required_version)
+		required_minor := VK_VERSION_MINOR(self.criteria.required_version)
+		required_patch := VK_VERSION_PATCH(self.criteria.required_version)
 		log.warnf(
-			"[%s] does not support required instance version [%u], ignoring...",
+			"[%s] Device supports API version [%d.%d.%d] but [%d.%d.%d] is required, ignoring...",
 			pd.name,
-			self.criteria.required_version,
+			supported_major,
+			supported_minor,
+			supported_patch,
+			required_major,
+			required_minor,
+			required_patch,
 		)
 		return .No
 	}
