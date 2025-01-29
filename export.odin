@@ -105,6 +105,8 @@ check_device_features_support :: vkb.check_device_features_support
 Physical_Device_Suitable :: vkb.Physical_Device_Suitable
 Physical_Device :: vkb.Physical_Device
 destroy_physical_device :: vkb.destroy_physical_device
+physical_device_get_queue_index :: vkb.physical_device_get_queue_index
+physical_device_get_dedicated_queue_index :: vkb.physical_device_get_dedicated_queue_index
 physical_device_has_dedicated_compute_queue :: vkb.physical_device_has_dedicated_compute_queue
 physical_device_has_dedicated_transfer_queue :: vkb.physical_device_has_dedicated_transfer_queue
 physical_device_has_separate_compute_queue :: vkb.physical_device_has_separate_compute_queue

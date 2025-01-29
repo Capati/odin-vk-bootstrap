@@ -42,6 +42,62 @@ destroy_physical_device :: proc(self: ^Physical_Device) {
 	}
 }
 
+physical_device_get_queue_index :: proc(
+	self: ^Physical_Device,
+	type: Queue_Type,
+) -> (
+	index: u32,
+	ok: bool,
+) #optional_ok {
+	index = vk.QUEUE_FAMILY_IGNORED
+
+	switch type {
+	case .Present:
+		index = get_present_queue_index(self.queue_families, self.ptr, self.surface)
+		if index == vk.QUEUE_FAMILY_IGNORED {
+			log.error("Present queue index unavailable.")
+			return
+		}
+	case .Graphics:
+		index = get_first_queue_index(self.queue_families, {.GRAPHICS})
+		if index == vk.QUEUE_FAMILY_IGNORED {
+			log.error("Graphics queue index unavailable.")
+			return
+		}
+	case .Compute:
+		index = get_separate_queue_index(self.queue_families, {.COMPUTE}, {.TRANSFER})
+		if index == vk.QUEUE_FAMILY_IGNORED {
+			log.error("Compute queue index unavailable.")
+			return
+		}
+	case .Transfer:
+		index = get_separate_queue_index(self.queue_families, {.TRANSFER}, {.COMPUTE})
+		if index == vk.QUEUE_FAMILY_IGNORED {
+			log.error("Transfer queue index unavailable.")
+			return
+		}
+	}
+
+	return index, index != vk.QUEUE_FAMILY_IGNORED
+}
+
+physical_device_get_dedicated_queue_index :: proc(
+	self: ^Physical_Device,
+	type: Queue_Type,
+) -> (
+	index: u32,
+	ok: bool,
+) #optional_ok {
+	index = vk.QUEUE_FAMILY_IGNORED
+	#partial switch type {
+	case .Compute:
+		index = get_dedicated_queue_index(self.queue_families, {.COMPUTE}, {.TRANSFER})
+	case .Transfer:
+		index = get_dedicated_queue_index(self.queue_families, {.TRANSFER}, {.COMPUTE})
+	}
+	return index, index != vk.QUEUE_FAMILY_IGNORED
+}
+
 /* Has a queue family that supports compute operations but not graphics nor transfer. */
 physical_device_has_dedicated_compute_queue :: proc(self: ^Physical_Device) -> (result: bool) {
 	result =
