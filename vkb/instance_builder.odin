@@ -162,7 +162,7 @@ build_instance :: proc(self: ^Instance_Builder) -> (instance: ^Instance, ok: boo
 		)
 	} else {
 		if self.debug_callback != nil {
-			log.infof("Extension [%s] enabled", vk.EXT_DEBUG_UTILS_EXTENSION_NAME)
+			log.debugf("Extension [%s] enabled", vk.EXT_DEBUG_UTILS_EXTENSION_NAME)
 			append(&extensions, vk.EXT_DEBUG_UTILS_EXTENSION_NAME)
 		} else {
 			log.warnf(
@@ -183,7 +183,7 @@ build_instance :: proc(self: ^Instance_Builder) -> (instance: ^Instance, ok: boo
 		)
 
 	if (properties2_ext_enabled) {
-		log.infof(
+		log.warnf(
 			"Enforcing required extension [%s] for Vulkan 1.0",
 			vk.KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME,
 		)
@@ -197,7 +197,7 @@ build_instance :: proc(self: ^Instance_Builder) -> (instance: ^Instance, ok: boo
 		)
 
 		if (portability_enumeration_support) {
-			log.infof("Extension [%s] enabled", vk.KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME)
+			log.debugf("Extension [%s] enabled", vk.KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME)
 			append(&extensions, vk.KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME)
 		}
 	}
@@ -291,7 +291,7 @@ build_instance :: proc(self: ^Instance_Builder) -> (instance: ^Instance, ok: boo
 
 	if (self.enable_validation_layers ||
 		   (self.request_validation_layers && self.info.validation_layers_available)) {
-		log.infof("Layer [%s] enabled", VALIDATION_LAYER_NAME)
+		log.debugf("Layer [%s] enabled", VALIDATION_LAYER_NAME)
 		append(&layers, VALIDATION_LAYER_NAME)
 	}
 
@@ -464,7 +464,7 @@ instance_enable_layer :: proc(self: ^Instance_Builder, layer_name: cstring) {
 	if layer_name == nil {
 		return
 	}
-	log.infof("Layer [%s] enabled", layer_name)
+	log.debugf("Layer [%s] enabled", layer_name)
 	append(&self.layers, layer_name)
 }
 
@@ -477,7 +477,7 @@ instance_enable_extension :: proc(self: ^Instance_Builder, extension_name: cstri
 	if extension_name == nil {
 		return
 	}
-	log.infof("Extension [%s] enabled", extension_name)
+	log.debugf("Extension [%s] enabled", extension_name)
 	append(&self.extensions, extension_name)
 }
 
@@ -624,6 +624,9 @@ instance_add_validation_feature_disable_slice :: proc(
 ) {
 	append(&self.disabled_validation_features, ..disable)
 }
+
+/* Disables sections of the validation layers. */
+instance_add_many_validation_feature_disable :: instance_add_validation_feature_disable_slice
 
 /* Provide custom allocation callbacks. */
 instance_set_allocation_callbacks :: proc(

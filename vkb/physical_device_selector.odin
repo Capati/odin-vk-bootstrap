@@ -132,7 +132,7 @@ select_physical_device :: proc(
 
 	physical_device = selected_devices[0]
 
-	log.infof("Selected physical device: %s", physical_device.name)
+	log.debugf("Selected physical device: [%s]", physical_device.name)
 
 	return physical_device, true
 }
