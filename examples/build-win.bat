@@ -1,27 +1,29 @@
 @echo off
+setlocal enabledelayedexpansion
 
-set "OUTPUT_DIR=build"
-set "EXECUTABLE_NAME=triangle_debug.exe"
+set OUTPUT_DIR=build
+set EXECUTABLE_NAME=triangle_debug.exe
+set RUN_AFTER_BUILD=false
 
-set "type=%~1"
-if "%type%"=="" set type=build
+for %%i in (%*) do (
+    if /i "%%i"=="run" (
+        set RUN_AFTER_BUILD=true
+    )
+)
 
-odin build .\triangle ^
-	-debug ^
-	-vet ^
-    -strict-style ^
-	-out:%OUTPUT_DIR%/%EXECUTABLE_NAME%
-
-set compiler_error_code=%errorlevel%
-
-if %compiler_error_code% neq 0 (
-	echo Failed to compile!
-	exit 1
+call odin build .\triangle ^
+    -debug ^
+    -out:%OUTPUT_DIR%/%EXECUTABLE_NAME%
+if errorlevel 1 (
+    echo Failed to compile!
+    exit /b 1
 )
 
 echo Compiled successfully!
 
-if "%type%"=="run" (
-	cd %OUTPUT_DIR%
-	.\%EXECUTABLE_NAME%
+if "%RUN_AFTER_BUILD%"=="true" (
+    pushd build
+    "%EXECUTABLE_NAME%"
+    popd
 )
+exit /b 0
