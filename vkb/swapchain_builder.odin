@@ -264,9 +264,9 @@ build_swapchain :: proc(
 	)
 
 	if !self.initialized {
-		log.infof("Image count: [%d]", image_count)
-		log.infof("Selected surface format: [%v]", surface_format.format)
-		log.infof("Selected surface color space: [%v]", surface_format.colorSpace)
+		log.debugf("Image count: [%d]", image_count)
+		log.debugf("Selected surface format: [%v]", surface_format.format)
+		log.debugf("Selected surface color space: [%v]", surface_format.colorSpace)
 	}
 
 	extent := swapchain_builder_utils_find_extent(
@@ -279,7 +279,8 @@ build_swapchain :: proc(
 	if surface_support.capabilities.maxImageArrayLayers < self.array_layer_count {
 		if !self.initialized {
 			log.warnf(
-				"Requested image array layers [%d] is greater than supported max image array layers [%d], defaulting to maximum value...",
+				"Requested image array layers [%d] is greater than supported max image array " +
+				"layers [%d], defaulting to maximum value...",
 				image_array_layers,
 				surface_support.capabilities.maxImageArrayLayers,
 			)
@@ -301,7 +302,7 @@ build_swapchain :: proc(
 	)
 
 	if !self.initialized {
-		log.infof("Selected present mode: [%v]", present_mode)
+		log.debugf("Selected present mode: [%v]", present_mode)
 	}
 
 	// vk.SurfaceCapabilitiesKHR.supportedUsageFlags is only valid for some present modes. For
@@ -360,7 +361,7 @@ build_swapchain :: proc(
 	}
 
 	if !self.initialized {
-		log.infof("Image sharing mode: [%v]", swapchain_create_info.imageSharingMode)
+		log.debugf("Image sharing mode: [%v]", swapchain_create_info.imageSharingMode)
 	}
 
 	swapchain_create_info.preTransform = pre_transform
