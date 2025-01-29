@@ -15,6 +15,8 @@ when ODIN_DEBUG {
 }
 ```
 
+You can also set a custom logger with `vkb.set_logger(logger)`.
+
 ## Instance Creation
 
 Creating an instance with `odin-vk-bootstrap` uses the `vkb.init_instance_builder` procedure. Most
