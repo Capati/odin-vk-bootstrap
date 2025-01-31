@@ -1,6 +1,6 @@
 package vk_bootstrap
 
-// Packages
+// Vendor
 import vk "vendor:vulkan"
 
 /*

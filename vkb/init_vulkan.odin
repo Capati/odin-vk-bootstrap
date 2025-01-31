@@ -1,10 +1,12 @@
 #+vet !unused-imports
 package vk_bootstrap
 
-// Packages
+// Core
 import "base:runtime"
 import "core:dynlib"
 import "core:os"
+
+// Vendor
 import vk "vendor:vulkan"
 
 @(private = "file")

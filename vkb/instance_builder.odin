@@ -1,11 +1,15 @@
 package vk_bootstrap
 
-// Packages
+// Core
 import "base:runtime"
 import "core:log"
 import "core:mem"
 import "core:strings"
+
+// Vendor
 import vk "vendor:vulkan"
+
+DEFAULT_API_VERSION :: vk.API_VERSION_1_0
 
 Instance_Builder :: struct {
 	// vk.ApplicationInfo
@@ -41,7 +45,7 @@ Instance_Builder :: struct {
 	use_debug_messenger:          bool,
 	headless_context:             bool,
 
-	// System information
+	// System info
 	info:                         System_Info,
 
 	// Internal
@@ -116,7 +120,7 @@ build_instance :: proc(
 	log.info("Building instance...")
 
 	// Initialize with base version
-	api_version: u32 = vk.API_VERSION_1_0
+	api_version: u32 = DEFAULT_API_VERSION
 
 	// Ensure minimum version
 	self.minimum_instance_version = max(vk.API_VERSION_1_0, self.minimum_instance_version)

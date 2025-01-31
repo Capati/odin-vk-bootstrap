@@ -1,8 +1,10 @@
 #+private
 package vk_bootstrap
 
-// Packages
+// Core
 import "core:log"
+
+// Vendor
 import vk "vendor:vulkan"
 
 swapchain_builder_utils_add_desired_formats :: proc(formats: ^[dynamic]vk.SurfaceFormatKHR) {

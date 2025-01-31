@@ -1,10 +1,12 @@
 #+private
 package vk_bootstrap
 
-// Packages
+// Core
 import "core:log"
 import "core:mem"
 import "core:reflect"
+
+// Vendor
 import vk "vendor:vulkan"
 
 /* Assuming the total of bits from any extension feature. */
@@ -32,14 +34,14 @@ generic_features_match :: proc(
 	requested: ^Generic_Feature,
 	supported: ^Generic_Feature,
 ) -> (
-	result: bool,
+	ok: bool,
 ) {
 	assert(
 		requested.p_next.sType == supported.p_next.sType,
 		"Non-matching sTypes in features nodes!",
 	)
 
-	result = true
+	ok = true
 
 	for i in 0 ..< FEATURES_BITS_FIELDS_CAPACITY {
 		// Skip fields sType and pNext
@@ -55,7 +57,7 @@ generic_features_match :: proc(
 				field.name,
 				requested.p_next.sType,
 			)
-			result = false
+			ok = false
 		}
 	}
 

@@ -1,8 +1,10 @@
 package vk_bootstrap
 
-// Packages
+// Core
 import "core:log"
 import "core:mem"
+
+// Vendor
 import vk "vendor:vulkan"
 
 Physical_Device_Suitable :: enum {

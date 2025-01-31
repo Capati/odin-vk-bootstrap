@@ -1,7 +1,9 @@
 package vk_bootstrap
 
-// Packages
+// Core
 import "core:log"
+
+// Vendor
 import vk "vendor:vulkan"
 
 set_logger :: proc(logger: log.Logger) {
