@@ -55,10 +55,10 @@ Preferred_Device_Type :: enum {
 init_physical_device_selector :: proc(
 	instance: ^Instance,
 ) -> (
-	pd_selector: Physical_Device_Selector,
+	selector: Physical_Device_Selector,
 	ok: bool,
 ) #optional_ok {
-	pd_selector = Physical_Device_Selector {
+	selector = Physical_Device_Selector {
 		instance_info = Instance_Info {
 			instance = instance.ptr,
 			surface = 0,
@@ -84,7 +84,7 @@ init_physical_device_selector :: proc(
 		},
 	}
 
-	return pd_selector, true
+	return selector, true
 }
 
 destroy_physical_device_selector :: proc(self: ^Physical_Device_Selector) {
@@ -142,19 +142,12 @@ select_physical_device :: proc(
 selector_select_impl :: proc(
 	self: ^Physical_Device_Selector,
 	selection: Device_Selection_Mode,
-	allocator: mem.Allocator,
+	allocator := context.allocator,
 ) -> (
-	physical_devices: [dynamic]^Physical_Device,
+	physical_devices: []^Physical_Device,
 	ok: bool,
 ) #optional_ok {
-	physical_devices.allocator = allocator
-
-	defer if !ok {
-		for &pd in physical_devices {
-			destroy_physical_device(pd)
-		}
-	}
-
+	// Validate selection requirements
 	if (self.criteria.require_present && !self.criteria.defer_surface_initialization) {
 		if (self.instance_info.surface == 0) {
 			log.errorf("Present is required, but no surface is provided.")
@@ -165,69 +158,125 @@ selector_select_impl :: proc(
 	ta := context.temp_allocator
 	runtime.DEFAULT_TEMP_ALLOCATOR_TEMP_GUARD(ignore = allocator == ta)
 
+	// Get all available physical devices
+	vk_physical_devices := enumerate_physical_devices(self.instance_info.instance, ta) or_return
+
+	// Handle first GPU selection separately
+	// if this option is set, always return only the first physical device found
+	if self.criteria.use_first_gpu_unconditionally && len(vk_physical_devices) > 0 {
+		return select_first_gpu(self, vk_physical_devices, allocator)
+	}
+
+	// Process all devices and sort them
+	return process_and_sort_devices(self, vk_physical_devices, selection, allocator)
+}
+
+enumerate_physical_devices :: proc(
+	instance: vk.Instance,
+	allocator := context.allocator,
+) -> (
+	devices: []vk.PhysicalDevice,
+	ok: bool,
+) {
+	count: u32
+	if res := vk.EnumeratePhysicalDevices(instance, &count, nil); res != .SUCCESS {
+		log.errorf("Failed to enumerate physical devices count: \x1b[31m%v\x1b[0m", res)
 		return
 	}
 
-	if physical_device_count == 0 {
+	if count == 0 {
 		log.errorf("No physical device with Vulkan support detected.")
 		return
+	}
+
+	devices = make([]vk.PhysicalDevice, count, allocator)
+	if res := vk.EnumeratePhysicalDevices(instance, &count, raw_data(devices)); res != .SUCCESS {
+		log.errorf("Failed to enumerate physical devices: \x1b[31m%v\x1b[0m", res)
+		return
+	}
+
+	return devices, true
+}
+
+fill_physical_device_with_criteria :: proc(
+	selector: ^Physical_Device_Selector,
+	physical_device: ^Physical_Device,
+) -> (
+	ok: bool,
+) {
+	physical_device.features = selector.criteria.required_features
+	portability_ext_available := false
+
+	if selector.criteria.enable_portability_subset {
+		for &extension in &physical_device.available_extensions {
+			if cstring(&extension.extensionName[0]) == "VK_KHR_portability_subset" {
+				portability_ext_available = true
+				break
+			}
+		}
+	}
+
+	if portability_ext_available {
+		append(&physical_device.extensions_to_enable, "VK_KHR_portability_subset")
+	}
+
+	append(&physical_device.extensions_to_enable, ..selector.criteria.required_extensions[:])
+
+	return true
+}
+
+/* Handle first GPU selection. */
+select_first_gpu :: proc(
+	self: ^Physical_Device_Selector,
+	vk_physical_devices: []vk.PhysicalDevice,
+	allocator := context.allocator,
+) -> (
+	physical_devices: []^Physical_Device,
+	ok: bool,
+) {
+	physical_devices = make([]^Physical_Device, 1, allocator)
+
+	physical_device := selector_populate_device_details(
+		self,
+		vk_physical_devices[0],
+		&self.criteria.extended_features_chain,
+		allocator,
+	) or_return
+
+	fill_physical_device_with_criteria(self, physical_device) or_return
+
+	physical_devices[0] = physical_device
+
+	return physical_devices, true
+}
+
+/* Process and sort all devices. */
+process_and_sort_devices :: proc(
+	self: ^Physical_Device_Selector,
+	vk_physical_devices: []vk.PhysicalDevice,
+	selection: Device_Selection_Mode,
+	allocator := context.allocator,
+) -> (
+	physical_devices: []^Physical_Device,
+	ok: bool,
+) {
+	out := make([dynamic]^Physical_Device, allocator)
+
+	defer if !ok {
+		for &pd in out {
+			destroy_physical_device(pd)
+		}
+	}
+
+	Device_Score :: struct {
+		device: ^Physical_Device,
+		score:  int,
 	}
 
 	ta := context.temp_allocator
 	runtime.DEFAULT_TEMP_ALLOCATOR_TEMP_GUARD(ignore = allocator == ta)
 
-	vk_physical_devices := make([]vk.PhysicalDevice, physical_device_count, ta)
-
-	if res := vk.EnumeratePhysicalDevices(
-		self.instance_info.instance,
-		&physical_device_count,
-		raw_data(vk_physical_devices),
-	); res != .SUCCESS {
-		log.errorf("Failed to enumerate physical devices: [%v]", res)
-		return
-	}
-
-	fill_out_phys_dev_with_criteria :: proc(
-		self: ^Physical_Device_Selector,
-		physical_device: ^Physical_Device,
-	) -> (
-		ok: bool,
-	) {
-		physical_device.features = self.criteria.required_features
-		portability_ext_available := false
-
-		if self.criteria.enable_portability_subset {
-			for &extension in &physical_device.available_extensions {
-				if cstring(&extension.extensionName[0]) == "VK_KHR_portability_subset" {
-					portability_ext_available = true
-					break
-				}
-			}
-		}
-
-		if portability_ext_available {
-			append(&physical_device.extensions_to_enable, "VK_KHR_portability_subset")
-		}
-
-		append(&physical_device.extensions_to_enable, ..self.criteria.required_extensions[:])
-
-		return true
-	}
-
-	// if this option is set, always return only the first physical device found
-	if self.criteria.use_first_gpu_unconditionally && physical_device_count > 0 {
-		physical_device := selector_populate_device_details(
-			self,
-			vk_physical_devices[0],
-			&self.criteria.extended_features_chain,
-		) or_return
-		fill_out_phys_dev_with_criteria(self, physical_device) or_return
-
-		resize(&physical_devices, 1)
-		physical_devices[0] = physical_device
-
-		return
-	}
+	scored_devices := make([dynamic]Device_Score, ta)
 
 	// Goof check for support device priority (arrange best at the top of the list)
 	rate_device_priority :: proc(
@@ -273,103 +322,84 @@ selector_select_impl :: proc(
 		return
 	}
 
-	high_score_device := 0
-	fully_supported_count := 0
-	partial_supported_count := 0
-
-	// Populate their details and check their suitability
+	// Process all devices
 	for vk_pd in vk_physical_devices {
 		pd := selector_populate_device_details(
 			self,
 			vk_pd,
 			&self.criteria.extended_features_chain,
+			allocator,
 		) or_return
+
 		pd.suitable = device_selector_is_device_suitable(self, pd)
-
-		if pd.suitable != .No {
-			fill_out_phys_dev_with_criteria(self, pd) or_return
-
-			score := rate_device_priority(pd, &self.criteria)
-
-			if (score > high_score_device) {
-				high_score_device = score
-				// High score devices are at the beginning of the list
-				inject_at(&physical_devices, 0, pd)
-			} else {
-				append(&physical_devices, pd)
-			}
-
-			if pd.suitable == .Yes {
-				fully_supported_count += 1
-			} else if pd.suitable == .Partial {
-				partial_supported_count += 1
-			}
-		} else {
+		if pd.suitable == .No {
 			destroy_physical_device(pd)
+			continue
 		}
+
+		fill_physical_device_with_criteria(self, pd) or_return
+		append(
+			&scored_devices,
+			Device_Score{device = pd, score = rate_device_priority(pd, &self.criteria)},
+		)
 	}
 
-	pd_total := len(physical_devices)
-
-	if pd_total == 0 {
+	if len(scored_devices) == 0 {
 		log.error("No suitable device found")
 		return
 	}
 
-	if pd_total == 1 {
-		return physical_devices, true
-	}
+	// Sort devices by score
+	slice.sort_by(scored_devices[:], proc(a, b: Device_Score) -> bool {
+		return a.score > b.score
+	})
 
-	fully_supported := make([dynamic]^Physical_Device, fully_supported_count, ta)
-	partial_supported := make([dynamic]^Physical_Device, partial_supported_count, ta)
-
-	// Sort into fully and partially suitable devices
-	for &pd, i in physical_devices {
-		if pd.suitable == .Yes {
-			fully_supported[i] = pd
-		} else {
-			partial_supported[i] = pd
+	// Filter and copy to output
+	fully_supported_count := 0
+	for device in scored_devices {
+		if device.device.suitable == .Yes {
+			fully_supported_count += 1
 		}
 	}
 
-	clear(&physical_devices)
-
-	// Remove the partially suitable elements if they aren't desired
 	if selection == .Only_Fully_Suitable && fully_supported_count > 0 {
-		resize(&physical_devices, fully_supported_count)
-		copy(physical_devices[:], fully_supported[:])
-		for &pd in partial_supported {
-			destroy_physical_device(pd)
+		resize(&out, fully_supported_count)
+		device_idx := 0
+		for device in scored_devices {
+			if device.device.suitable == .Yes {
+				out[device_idx] = device.device
+				device_idx += 1
+			} else {
+				destroy_physical_device(device.device)
+			}
 		}
 	} else {
-		total := fully_supported_count + partial_supported_count
-		resize(&physical_devices, total)
-
-		if fully_supported_count > 0 {
-			copy(physical_devices[:], fully_supported[:])
-		}
-
-		if partial_supported_count > 0 {
-			copy(physical_devices[fully_supported_count:], partial_supported[:])
+		resize(&out, len(scored_devices))
+		for device, i in scored_devices {
+			out[i] = device.device
 		}
 	}
 
-	return physical_devices, true
+	return out[:], true
 }
 
 selector_populate_device_details :: proc(
 	self: ^Physical_Device_Selector,
 	vk_physical_device: vk.PhysicalDevice,
-	src_extended_features_chain: ^[dynamic]Generic_Feature,
+	features_chain: ^[dynamic]Generic_Feature,
+	allocator := context.allocator,
 ) -> (
 	pd: ^Physical_Device,
 	ok: bool,
 ) #optional_ok {
-	pd = new(Physical_Device)
-	ensure(pd != nil, "Failed to allocate a physical device object")
+	pd = new(Physical_Device, allocator)
+	ensure(pd != nil, "Failed to allocate a Physical Device object")
 	defer if !ok {
-		free(pd)
+		free(pd, allocator)
 	}
+	pd.allocator = allocator
+
+	context.allocator = allocator
 
 	pd.ptr = vk_physical_device
 	pd.surface = self.instance_info.surface
@@ -446,11 +476,10 @@ selector_populate_device_details :: proc(
 
 	instance_is_1_1 := self.instance_info.version >= vk.API_VERSION_1_1
 
-	if len(src_extended_features_chain) > 0 &&
-	   (instance_is_1_1 || self.instance_info.properties2_ext_enabled) {
+	if len(features_chain) > 0 && (instance_is_1_1 || self.instance_info.properties2_ext_enabled) {
 		// The required supported will be filled from the requested
 		clear(&pd.extended_features_chain)
-		append(&pd.extended_features_chain, ..src_extended_features_chain[:])
+		append(&pd.extended_features_chain, ..features_chain[:])
 
 		local_features := vk.PhysicalDeviceFeatures2 {
 			// KHR is same as core here
