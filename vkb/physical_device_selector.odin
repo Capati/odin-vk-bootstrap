@@ -134,7 +134,7 @@ select_physical_device :: proc(
 
 	physical_device = selected_devices[0]
 
-	log.debugf("Selected physical device: [%s]", physical_device.name)
+	log.debugf("Selected physical device: \x1b[32m%s\x1b[0m", physical_device.name)
 
 	return physical_device, true
 }
@@ -390,7 +390,7 @@ selector_populate_device_details :: proc(
 	vk.GetPhysicalDeviceQueueFamilyProperties(vk_physical_device, &queue_family_count, nil)
 
 	if queue_family_count == 0 {
-		log.errorf("[%s] No queue family properties found", pd.name)
+		log.errorf("\x1b[31m%s\x1b[0m: No queue family properties found", pd.name)
 		return
 	}
 
@@ -413,12 +413,15 @@ selector_populate_device_details :: proc(
 	property_count: u32
 	if res := vk.EnumerateDeviceExtensionProperties(vk_physical_device, nil, &property_count, nil);
 	   res != .SUCCESS {
-		log.errorf("Failed to enumerate device extensions properties count: [%s]", res)
+		log.errorf(
+			"Failed to enumerate device extensions properties count: \x1b[31m%v\x1b[0m",
+			res,
+		)
 		return
 	}
 
 	if property_count == 0 {
-		log.errorf("[%s] No device extension properties found", pd.name)
+		log.errorf("\x1b[31m%s\x1b[0m: No device extension properties found", pd.name)
 		return
 	}
 
@@ -430,7 +433,7 @@ selector_populate_device_details :: proc(
 		&property_count,
 		raw_data(pd.available_extensions),
 	); res != .SUCCESS {
-		log.errorf("Failed to enumerate device extensions properties: [%s]", res)
+		log.errorf("Failed to enumerate device extensions properties: \x1b[31m%v\x1b[0m", res)
 		return
 	}
 	defer if !ok {
@@ -476,7 +479,11 @@ device_selector_is_device_suitable :: proc(
 
 	// Check if physical device name match criteria
 	if self.criteria.name != "" && self.criteria.name != pd.name {
-		log.warnf("[%s] is not the required [%s], ignoring...", pd.name, self.criteria.name)
+		log.warnf(
+			"\x1b[33m%s\x1b[0m: is not the required \x1b[33m%s\x1b[0m, ignoring...",
+			pd.name,
+			self.criteria.name,
+		)
 		return .No
 	}
 
@@ -484,11 +491,14 @@ device_selector_is_device_suitable :: proc(
 		supported_major := VK_VERSION_MAJOR(pd.properties.apiVersion)
 		supported_minor := VK_VERSION_MINOR(pd.properties.apiVersion)
 		supported_patch := VK_VERSION_PATCH(pd.properties.apiVersion)
+
 		required_major := VK_VERSION_MAJOR(self.criteria.required_version)
 		required_minor := VK_VERSION_MINOR(self.criteria.required_version)
 		required_patch := VK_VERSION_PATCH(self.criteria.required_version)
+
 		log.warnf(
-			"[%s] Device supports API version [%d.%d.%d] but [%d.%d.%d] is required, ignoring...",
+			"\x1b[33m%s\x1b[0m: Device supports API version [%d.%d.%d] " +
+			"but [%d.%d.%d] is required, ignoring...",
 			pd.name,
 			supported_major,
 			supported_minor,
@@ -497,6 +507,7 @@ device_selector_is_device_suitable :: proc(
 			required_minor,
 			required_patch,
 		)
+
 		return .No
 	}
 
@@ -521,29 +532,41 @@ device_selector_is_device_suitable :: proc(
 		vk.QUEUE_FAMILY_IGNORED
 
 	if self.criteria.require_dedicated_compute_queue && !dedicated_compute {
-		log.warnf("[%s] does not support dedicated compute queue, ignoring...", pd.name)
+		log.warnf(
+			"\x1b[33m%s\x1b[0m: does not support dedicated compute queue, ignoring...",
+			pd.name,
+		)
 		return .No
 	}
 
 	if self.criteria.require_dedicated_transfer_queue && !dedicated_transfer {
-		log.warnf("[%s] does not support transfer compute queue, ignoring...", pd.name)
+		log.warnf(
+			"\x1b[33m%s\x1b[0m: does not support transfer compute queue, ignoring...",
+			pd.name,
+		)
 		return .No
 	}
 
 	if self.criteria.require_separate_compute_queue && !separate_compute {
-		log.warnf("[%s] does not support separate compute queue, ignoring...", pd.name)
+		log.warnf(
+			"\x1b[33m%s\x1b[0m: does not support separate compute queue, ignoring...",
+			pd.name,
+		)
 		return .No
 	}
 
 	if self.criteria.require_separate_transfer_queue && !separate_transfer {
-		log.warnf("[%s] does not support separate transfer queue, ignoring...", pd.name)
+		log.warnf(
+			"\x1b[33m%s\x1b[0m: does not support separate transfer queue, ignoring...",
+			pd.name,
+		)
 		return .No
 	}
 
 	if self.criteria.require_present &&
 	   !present_queue &&
 	   !self.criteria.defer_surface_initialization {
-		log.warnf("[%s] has no present queue, ignoring...", pd.name)
+		log.warnf("\x1b[33m%s\x1b[0m: has no present queue, ignoring...", pd.name)
 		return .No
 	}
 
@@ -551,7 +574,7 @@ device_selector_is_device_suitable :: proc(
 		&pd.available_extensions,
 		self.criteria.required_extensions[:],
 	) {
-		log.warnf("[%s] is missing required extensions, ignoring...", pd.name)
+		log.warnf("\x1b[33m%s\x1b[0m: is missing required extensions, ignoring...", pd.name)
 		return .No
 	}
 
@@ -565,7 +588,8 @@ device_selector_is_device_suitable :: proc(
 			nil,
 		); res != .SUCCESS {
 			log.errorf(
-				"Failed to get physical device [%s] surface formats: [%v], ignoring...",
+				"\x1b[33m%s\x1b[0m: Failed to get physical device surface formats: " +
+				"\x1b[33m%v\x1b[0m, ignoring...",
 				pd.name,
 				res,
 			)
@@ -585,7 +609,8 @@ device_selector_is_device_suitable :: proc(
 			nil,
 		); res != .SUCCESS {
 			log.errorf(
-				"Failed to get physical device [%s] surface present modes: [%v], ignoring...",
+				"\x1b[33m%s\x1b[0m: Failed to get physical device surface present modes: " +
+				"\x1b[33m%v\x1b[0m, ignoring...",
 				pd.name,
 				res,
 			)
@@ -593,7 +618,7 @@ device_selector_is_device_suitable :: proc(
 		}
 
 		if present_mode_count == 0 {
-			log.warnf("[%s] has no present modes, ignoring...", pd.name)
+			log.warnf("\x1b[33m%s\x1b[0m: has no present modes, ignoring...", pd.name)
 			return .No
 		}
 	}
@@ -601,7 +626,7 @@ device_selector_is_device_suitable :: proc(
 	if !self.criteria.allow_any_type &&
 	   pd.properties.deviceType != cast(vk.PhysicalDeviceType)self.criteria.preferred_type {
 		log.warnf(
-			"[%s] is not of preferred type: [%v], mark as 'Partial'",
+			"\x1b[33m%s\x1b[0m: is not of preferred type: \x1b[33m%v\x1b[0m, mark as 'Partial'",
 			pd.name,
 			self.criteria.preferred_type,
 		)
@@ -614,7 +639,7 @@ device_selector_is_device_suitable :: proc(
 		&pd.extended_features_chain,
 		&self.criteria.extended_features_chain,
 	) {
-		log.warnf("[%s] is missing required features support, ignoring...", pd.name)
+		log.warnf("\x1b[33m%s\x1b[0m: is missing required features support, ignoring...", pd.name)
 		return .No
 	}
 
@@ -623,7 +648,8 @@ device_selector_is_device_suitable :: proc(
 		if .DEVICE_LOCAL in pd.memory_properties.memoryHeaps[i].flags {
 			if pd.memory_properties.memoryHeaps[i].size < self.criteria.required_mem_size {
 				log.warnf(
-					"[%s] does not have required [%v] memory, ignoring...",
+					"\x1b[33m%s\x1b[0m: does not have required \x1b[33m%d\x1b[0m memory, " +
+					"ignoring...",
 					pd.name,
 					self.criteria.required_mem_size,
 				)

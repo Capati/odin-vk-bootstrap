@@ -129,9 +129,7 @@ build_instance :: proc(
 	// Get system's supported version
 	instance_version: u32
 	if res := vk.EnumerateInstanceVersion(&instance_version); res != .SUCCESS {
-		log.error(
-			"Failed to query instance version. Vulkan may not be supported on this system",
-		)
+		log.error("Failed to query instance version. Vulkan may not be supported on this system")
 		return
 	}
 
@@ -160,13 +158,13 @@ build_instance :: proc(
 	}
 
 	log.debugf(
-		"Instance version: [%d.%d.%d]",
+		"Instance version: \x1b[32m%d.%d.%d\x1b[0m",
 		VK_VERSION_MAJOR(instance_version),
 		VK_VERSION_MINOR(instance_version),
 		VK_VERSION_PATCH(instance_version),
 	)
 	log.debugf(
-		"Selected API version: [%d.%d.%d]",
+		"Selected API version: \x1b[32m%d.%d.%d\x1b[0m",
 		VK_VERSION_MAJOR(api_version),
 		VK_VERSION_MINOR(api_version),
 		VK_VERSION_PATCH(api_version),
@@ -191,16 +189,18 @@ build_instance :: proc(
 
 	if self.use_debug_messenger && !self.info.debug_utils_available {
 		log.warnf(
-			"Debug messenger was enabled but the required extension [%s] is not available; disabling...",
+			"Debug messenger was enabled but the required extension \x1b[33m%s\x1b[0m " +
+			"is not available; disabling...",
 			vk.EXT_DEBUG_UTILS_EXTENSION_NAME,
 		)
 	} else {
 		if self.debug_callback != nil {
-			log.debugf("Extension [%s] enabled", vk.EXT_DEBUG_UTILS_EXTENSION_NAME)
+			log.debugf("Extension \x1b[32m%s\x1b[0m enabled", vk.EXT_DEBUG_UTILS_EXTENSION_NAME)
 			append(&extensions, vk.EXT_DEBUG_UTILS_EXTENSION_NAME)
 		} else {
 			log.warnf(
-				"Debug extension [%s] is available, but no callback was set; disabling debug reporting...",
+				"Debug extension \x1b[33m%s\x1b[0m is available, " +
+				"but no callback was set; disabling debug reporting...",
 				vk.EXT_DEBUG_UTILS_EXTENSION_NAME,
 			)
 		}
@@ -218,7 +218,7 @@ build_instance :: proc(
 
 	if (properties2_ext_enabled) {
 		log.warnf(
-			"Enforcing required extension [%s] for Vulkan 1.0",
+			"Enforcing required extension \x1b[33m%s\x1b[0m for Vulkan 1.0",
 			vk.KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME,
 		)
 		append(&extensions, vk.KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME)
@@ -231,7 +231,10 @@ build_instance :: proc(
 		)
 
 		if (portability_enumeration_support) {
-			log.debugf("Extension [%s] enabled", vk.KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME)
+			log.debugf(
+				"Extension \x1b[32m%s\x1b[0m enabled",
+				vk.KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME,
+			)
 			append(&extensions, vk.KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME)
 		}
 	}
@@ -248,7 +251,7 @@ build_instance :: proc(
 				return true
 			}
 
-			log.warnf("Surface extension [%s] is not available", extension_name)
+			log.warnf("Surface extension \x1b[33m%s\x1b[0m is not available", extension_name)
 
 			return false
 		}
@@ -259,7 +262,7 @@ build_instance :: proc(
 			&self.info.available_extensions,
 		) {
 			log.fatalf(
-				"Required base windowing extension [%s] not present!",
+				"Required base windowing extension \x1b[31m%s\x1b[0m not present!",
 				vk.KHR_SURFACE_EXTENSION_NAME,
 			)
 			return
@@ -325,7 +328,7 @@ build_instance :: proc(
 
 	if (self.enable_validation_layers ||
 		   (self.request_validation_layers && self.info.validation_layers_available)) {
-		log.debugf("Layer [%s] enabled", VALIDATION_LAYER_NAME)
+		log.debugf("Layer \x1b[32m%s\x1b[0m enabled", VALIDATION_LAYER_NAME)
 		append(&layers, VALIDATION_LAYER_NAME)
 	}
 
@@ -394,7 +397,7 @@ build_instance :: proc(
 
 	if res := vk.CreateInstance(&instance_create_info, self.allocation_callbacks, &instance.ptr);
 	   res != .SUCCESS {
-		log.fatalf("Failed to create vulkan instance: %v", res)
+		log.fatalf("Failed to create instance: \x1b[31m%v\x1b[0m", res)
 		return
 	}
 
@@ -417,7 +420,7 @@ build_instance :: proc(
 			self.allocation_callbacks,
 			&instance.debug_messenger,
 		); res != .SUCCESS {
-			log.fatalf("Failed to create debug messenger: %v", res)
+			log.fatalf("Failed to create debug messenger: \x1b[31m%v\x1b[0m", res)
 			return
 		}
 	}
@@ -501,6 +504,7 @@ instance_enable_layer :: proc(
 	loc := #caller_location,
 ) {
 	assert(layer_name != "", "Invalid layer name", loc)
+	log.debugf("Layer \x1b[32m%s\x1b[0m enabled", layer_name)
 	append(&self.layers, strings.clone_to_cstring(layer_name, self.allocator))
 }
 
@@ -516,6 +520,7 @@ instance_enable_layers :: proc(
 ) {
 	for layer in layers {
 		assert(layer != "", "Invalid layer name", loc)
+		log.debugf("Layer \x1b[32m[%s]\x1b[0m enabled", layer)
 		append(&self.layers, strings.clone_to_cstring(layer, self.allocator))
 	}
 }
@@ -531,6 +536,7 @@ instance_enable_extension :: proc(
 	loc := #caller_location,
 ) {
 	assert(extension_name != "", "Invalid extension name", loc)
+	log.debugf("Extension \x1b[32m[%s]\x1b[0m enabled", extension_name)
 	append(&self.extensions, strings.clone_to_cstring(extension_name, self.allocator))
 }
 
@@ -546,6 +552,7 @@ instance_enable_extensions :: proc(
 ) {
 	for ext in extensions {
 		assert(ext != "", "Invalid extension name", loc)
+		log.debugf("Extension \x1b[32m[%s]\x1b[0m enabled", ext)
 		append(&self.extensions, strings.clone_to_cstring(ext, self.allocator))
 	}
 }

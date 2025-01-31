@@ -57,7 +57,7 @@ swapchain_get_images :: proc(
 	image_count: u32 = 0
 	if res := vk.GetSwapchainImagesKHR(self.device.ptr, self.ptr, &image_count, nil);
 	   res != .SUCCESS {
-		log.fatalf("Failed to get swapchain images count: [%v]", res)
+		log.fatalf("Failed to get swapchain images count: \x1b[31m%v\x1b[0m", res)
 		return
 	}
 
@@ -73,7 +73,7 @@ swapchain_get_images :: proc(
 
 	if res := vk.GetSwapchainImagesKHR(self.device.ptr, self.ptr, &image_count, raw_data(images));
 	   res != .SUCCESS {
-		log.fatalf("Failed to get swapchain images: [%v]", res)
+		log.fatalf("Failed to get swapchain images: \x1b[31m%v\x1b[0m", res)
 		return
 	}
 
@@ -153,7 +153,7 @@ swapchain_get_image_views :: proc(
 			self.allocation_callbacks,
 			&views[i],
 		); res != .SUCCESS {
-			log.fatalf("Failed to create swapchain image view: [%v] ", res)
+			log.fatalf("Failed to create swapchain image view: \x1b[31m%v\x1b[0m ", res)
 			return
 		}
 	}
@@ -162,9 +162,12 @@ swapchain_get_image_views :: proc(
 }
 
 swapchain_destroy_image_views :: proc(self: ^Swapchain, views: []vk.ImageView) {
-	for view, i in views {
+	for view, index in views {
 		if view == 0 {
-			log.warnf("Trying to destroy an invalid image view at [%d], ignoring...", i)
+			log.warnf(
+				"Trying to destroy an invalid image view at \x1b[33m%d\x1b[0m, ignoring...",
+				index,
+			)
 			continue
 		}
 		vk.DestroyImageView(self.device.ptr, view, self.allocation_callbacks)

@@ -53,7 +53,7 @@ generic_features_match :: proc(
 
 		if requested.p_next.fields[i] && !supported.p_next.fields[i] {
 			log.warnf(
-				"Requested feature bit [%s] is missing for [%v]",
+				"Requested feature bit \x1b[33m%s\x1b[0m is missing for \x1b[33m%v\x1b[0m",
 				field.name,
 				requested.p_next.sType,
 			)

@@ -178,7 +178,7 @@ physical_device_enable_extension_if_present :: proc(
 		}
 	}
 
-	log.warnf("The extension [%s] is not available", extension)
+	log.warnf("The extension \x1b[33m%s\x1b[0m is not available", extension)
 
 	return false
 }
@@ -197,7 +197,7 @@ physical_device_enable_extensions_if_present :: proc(
 	for &available in &self.available_extensions {
 		for ext in extensions {
 			if cstring(&available.extensionName[0]) != ext {
-				log.warnf("The extension [%s] is not available", ext)
+				log.warnf("The extension \x1b[33m%s\x1b[0m is not available", ext)
 				all_ext_present = false
 			}
 		}

@@ -152,7 +152,7 @@ init_swapchain_builder_handles :: proc(
 			ta,
 		)
 		if queue_families_err != nil {
-			log.fatalf("Failed to allocate queue families: [%v]", queue_families_err)
+			log.fatalf("Failed to allocate queue families: \x1b[31m%v\x1b[0m", queue_families_err)
 			return
 		}
 
@@ -257,7 +257,7 @@ build_swapchain :: proc(
 	if self.required_min_image_count >= 1 {
 		if self.required_min_image_count < surface_support.capabilities.minImageCount {
 			log.errorf(
-				"Required minimum image count [%d] is too low",
+				"Required minimum image count \x1b[31m%d\x1b[0m is too low",
 				self.required_min_image_count,
 			)
 			return
@@ -286,9 +286,9 @@ build_swapchain :: proc(
 	)
 
 	if !self.initialized {
-		log.debugf("Image count: [%d]", image_count)
-		log.debugf("Selected surface format: [%v]", surface_format.format)
-		log.debugf("Selected surface color space: [%v]", surface_format.colorSpace)
+		// log.debugf("Image count: \x1b[32m%d\x1b[0m", image_count)
+		log.debugf("Selected surface format: \x1b[32m%v\x1b[0m", surface_format.format)
+		log.debugf("Selected surface color space: \x1b[32m%v\x1b[0m", surface_format.colorSpace)
 	}
 
 	extent := swapchain_builder_utils_find_extent(
@@ -301,8 +301,8 @@ build_swapchain :: proc(
 	if surface_support.capabilities.maxImageArrayLayers < self.array_layer_count {
 		if !self.initialized {
 			log.warnf(
-				"Requested image array layers [%d] is greater than supported max image array " +
-				"layers [%d], defaulting to maximum value...",
+				"Requested image array layers \x1b[33m%d\x1b[0m is greater than supported max " +
+				"image array layers \x1b[33m%d\x1b[0m, defaulting to maximum value...",
 				image_array_layers,
 				surface_support.capabilities.maxImageArrayLayers,
 			)
@@ -324,7 +324,7 @@ build_swapchain :: proc(
 	)
 
 	if !self.initialized {
-		log.debugf("Selected present mode: [%v]", present_mode)
+		log.debugf("Selected present mode: \x1b[32m%v\x1b[0m", present_mode)
 	}
 
 	// vk.SurfaceCapabilitiesKHR.supportedUsageFlags is only valid for some present modes. For
@@ -339,7 +339,7 @@ build_swapchain :: proc(
 	if is_unextended_present_mode &&
 	   (self.image_usage_flags & surface_support.capabilities.supportedUsageFlags) !=
 		   self.image_usage_flags {
-		log.errorf("Required image usages [%v] not supported", self.image_usage_flags)
+		log.errorf("Required image usages \x1b[31m%v\x1b[0m not supported", self.image_usage_flags)
 		return
 	}
 
@@ -383,7 +383,7 @@ build_swapchain :: proc(
 	}
 
 	if !self.initialized {
-		log.debugf("Image sharing mode: [%v]", swapchain_create_info.imageSharingMode)
+		log.debugf("Image sharing mode: \x1b[32m%v\x1b[0m", swapchain_create_info.imageSharingMode)
 	}
 
 	swapchain_create_info.preTransform = pre_transform
@@ -405,7 +405,7 @@ build_swapchain :: proc(
 		self.allocation_callbacks,
 		&swapchain.ptr,
 	); res != .SUCCESS {
-		log.fatalf("Failed to create Swapchain: [%v]", res)
+		log.fatalf("Failed to create Swapchain: \x1b[31m%v\x1b[0m", res)
 		return
 	}
 

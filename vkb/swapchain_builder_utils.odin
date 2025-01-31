@@ -44,7 +44,7 @@ swapchain_builder_utils_query_surface_support_details :: proc(
 		surface,
 		&details.capabilities,
 	); res != .SUCCESS {
-		log.fatalf("Failed to get physical device surface capabilities? [%v]", res)
+		log.fatalf("Failed to get physical device surface capabilities? \x1b[31m%v\x1b[0m", res)
 		return
 	}
 
@@ -52,7 +52,7 @@ swapchain_builder_utils_query_surface_support_details :: proc(
 	format_count: u32
 	if res := vk.GetPhysicalDeviceSurfaceFormatsKHR(physical_device, surface, &format_count, nil);
 	   res != .SUCCESS {
-		log.fatalf("Failed to get surface formats count: [%v]", res)
+		log.fatalf("Failed to get surface formats count: \x1b[31m%v\x1b[0m", res)
 		return
 	}
 
@@ -72,7 +72,7 @@ swapchain_builder_utils_query_surface_support_details :: proc(
 		&format_count,
 		raw_data(details.formats),
 	); res != .SUCCESS {
-		log.fatalf("Failed to get surface formats: [%v]", res)
+		log.fatalf("Failed to get surface formats: \x1b[31m%v\x1b[0m", res)
 		return
 	}
 
@@ -84,7 +84,7 @@ swapchain_builder_utils_query_surface_support_details :: proc(
 		&present_mode_count,
 		nil,
 	); res != .SUCCESS {
-		log.fatalf("Failed to get surface present modes count: [%v]", res)
+		log.fatalf("Failed to get surface present modes count: \x1b[31m%v\x1b[0m", res)
 		return
 	}
 
@@ -104,7 +104,7 @@ swapchain_builder_utils_query_surface_support_details :: proc(
 		&present_mode_count,
 		raw_data(details.present_modes),
 	); res != .SUCCESS {
-		log.fatalf("Failed to get surface present modes: [%v]", res)
+		log.fatalf("Failed to get surface present modes: \x1b[31m%v\x1b[0m", res)
 		return
 	}
 
@@ -124,7 +124,8 @@ swapchain_builder_utils_find_best_surface_format :: proc(
 
 	// Use the first available format as a fallback if any desired formats aren't found
 	log.warnf(
-		"Desired surface formats not found, fallback to the first available format: [%v] | [%v]",
+		"Desired surface formats not found, fallback to the first available format: " +
+		"\x1b[33m%v\x1b[0m | \x1b[33m%v\x1b[0m",
 		available_formats[0].format,
 		available_formats[0].colorSpace,
 	)

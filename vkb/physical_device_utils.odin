@@ -22,7 +22,7 @@ check_device_extension_support :: proc(
 	for &avail_ext in available_extensions {
 		for req_ext in required_extensions {
 			if cstring(&avail_ext.extensionName[0]) != req_ext {
-				log.warnf("Required extension [%s] is not available", req_ext)
+				log.warnf("Required extension \x1b[33m%s\x1b[0m is not available", req_ext)
 				supported = false
 			}
 		}

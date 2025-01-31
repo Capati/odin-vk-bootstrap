@@ -140,7 +140,8 @@ build_device :: proc(
 
 	if user_defined_phys_dev_features_2 && len(self.physical_device.extended_features_chain) > 0 {
 		log.error(
-			"Vulkan physical device features 2 in pNext chain while using add required extension features",
+			"Vulkan physical device features 2 in pNext chain while using " +
+			"add required extension features",
 		)
 		return
 	}
@@ -197,7 +198,7 @@ build_device :: proc(
 		self.allocation_callbacks,
 		&device.ptr,
 	); res != .SUCCESS {
-		log.fatalf("Failed to create logical device: [%v]", res)
+		log.fatalf("Failed to create logical device: \x1b[31m%v\x1b[0m", res)
 		return
 	}
 
