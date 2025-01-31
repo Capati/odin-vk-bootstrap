@@ -164,7 +164,9 @@ create_swapchain :: proc(s: ^State, width, height: u32) -> (ok: bool) {
 	vkb.swapchain_builder_set_present_mode(&builder, .FIFO)
 
 	swapchain := vkb.build_swapchain(&builder) or_return
-	vkb.destroy_swapchain(s.swapchain)
+	if s.swapchain != nil {
+		vkb.destroy_swapchain(s.swapchain)
+	}
 	s.swapchain = swapchain
 
 	return true
