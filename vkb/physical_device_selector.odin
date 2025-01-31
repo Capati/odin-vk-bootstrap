@@ -381,8 +381,8 @@ selector_populate_device_details :: proc(
 
 	// Set device name
 	pd_name := cstring(&pd.properties.deviceName[0])
-	if pd_name != nil && pd_name != "" {
-		pd.name = strings.clone_from(pd.properties.deviceName[:])
+	if pd_name != nil {
+		pd.name = strings.clone_from(pd.properties.deviceName[:len(pd_name)])
 	}
 
 	// Get the device queue families
