@@ -1,8 +1,11 @@
 package vk_bootstrap
 
-// Packages
+// Core
 import "base:runtime"
 import "core:log"
+import "core:mem"
+
+// Vendor
 import vk "vendor:vulkan"
 
 Swapchain_Builder :: struct {
@@ -28,6 +31,9 @@ Swapchain_Builder :: struct {
 	old_swapchain:            vk.SwapchainKHR,
 	allocation_callbacks:     ^vk.AllocationCallbacks,
 	initialized:              bool,
+
+	// Internal
+	allocator:                mem.Allocator,
 }
 
 Buffer_Mode :: enum u32 {
@@ -48,6 +54,14 @@ DEFAULT_SWAPCHAIN_BUILDER :: Swapchain_Builder {
 	clipped           = true,
 }
 
+init_swapchain_builder_base :: proc(builder: ^Swapchain_Builder) {
+	builder.allocator = runtime.default_allocator()
+
+	builder.p_next_chain.allocator = builder.allocator
+	builder.desired_formats.allocator = builder.allocator
+	builder.desired_present_modes.allocator = builder.allocator
+}
+
 /* Construct a `Swapchain_Builder` with a `vkb.Device`. */
 init_swapchain_builder_default :: proc(
 	device: ^Device,
@@ -56,6 +70,8 @@ init_swapchain_builder_default :: proc(
 	ok: bool,
 ) #optional_ok {
 	builder = DEFAULT_SWAPCHAIN_BUILDER
+
+	init_swapchain_builder_base(&builder)
 
 	builder.physical_device = device.physical_device
 	builder.device = device
@@ -76,6 +92,8 @@ init_swapchain_builder_surface :: proc(
 	ok: bool,
 ) #optional_ok {
 	builder = DEFAULT_SWAPCHAIN_BUILDER
+
+	init_swapchain_builder_base(&builder)
 
 	builder.physical_device = device.physical_device
 	builder.device = device
@@ -102,6 +120,8 @@ init_swapchain_builder_handles :: proc(
 	ok: bool,
 ) #optional_ok {
 	builder = DEFAULT_SWAPCHAIN_BUILDER
+
+	init_swapchain_builder_base(&builder)
 
 	builder.physical_device = device.physical_device
 	builder.device = device
@@ -175,15 +195,17 @@ init_swapchain_builder :: proc {
 }
 
 destroy_swapchain_builder :: proc(self: ^Swapchain_Builder) {
+	context.allocator = self.allocator
 	delete(self.p_next_chain)
-	delete(self.desired_present_modes)
 	delete(self.desired_formats)
+	delete(self.desired_present_modes)
 }
 
 /* Create a `Swapchain`. Return an error if it failed. */
 @(require_results)
 build_swapchain :: proc(
 	self: ^Swapchain_Builder,
+	allocator := context.allocator,
 ) -> (
 	swapchain: ^Swapchain,
 	ok: bool,
@@ -204,7 +226,7 @@ build_swapchain :: proc(
 	}
 
 	ta := context.temp_allocator
-	runtime.DEFAULT_TEMP_ALLOCATOR_TEMP_GUARD()
+	runtime.DEFAULT_TEMP_ALLOCATOR_TEMP_GUARD(ignore = allocator == ta)
 
 	desired_formats := make([dynamic]vk.SurfaceFormatKHR, ta)
 
@@ -370,11 +392,12 @@ build_swapchain :: proc(
 	swapchain_create_info.clipped = b32(self.clipped)
 	swapchain_create_info.oldSwapchain = self.old_swapchain
 
-	swapchain = new(Swapchain)
-	ensure(swapchain != nil, "Failed to allocate a swapchain object")
+	swapchain = new(Swapchain, allocator)
+	ensure(swapchain != nil, "Failed to allocate a Swapchain object")
 	defer if !ok {
-		free(swapchain)
+		free(swapchain, allocator)
 	}
+	swapchain.allocator = allocator
 
 	if res := vk.CreateSwapchainKHR(
 		self.device.ptr,

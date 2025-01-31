@@ -1,8 +1,11 @@
 package vk_bootstrap
 
-// Packages
+// Core
 import "base:runtime"
 import "core:log"
+import "core:mem"
+
+// Vendor
 import vk "vendor:vulkan"
 
 Swapchain :: struct {
@@ -10,19 +13,26 @@ Swapchain :: struct {
 	device:                    ^Device,
 	image_count:               u32,
 	queue_indices:             [Queue_Family_Indices]u32,
+
 	// The image format actually used when creating the swapchain.
 	image_format:              vk.Format,
+
 	// The color space actually used when creating the swapchain.
 	color_space:               vk.ColorSpaceKHR,
 	image_usage_flags:         vk.ImageUsageFlags,
 	extent:                    vk.Extent2D,
+
 	// The value of `minImageCount` actually used when creating the swapchain; note that the
 	// presentation engine is always free to create more images than that.
 	requested_min_image_count: u32,
+
 	// The present mode actually used when creating the swapchain.
 	present_mode:              vk.PresentModeKHR,
 	instance_version:          u32,
 	allocation_callbacks:      ^vk.AllocationCallbacks,
+
+	// Internal
+	allocator:                 mem.Allocator,
 }
 
 Queue_Family_Indices :: enum {
@@ -30,14 +40,10 @@ Queue_Family_Indices :: enum {
 	Present,
 }
 
-destroy_swapchain :: proc(self: ^Swapchain) {
-	if self == nil {
-		return
-	}
-	defer free(self)
-	if self.device != nil && self.ptr != 0 {
-		vk.DestroySwapchainKHR(self.device.ptr, self.ptr, self.allocation_callbacks)
-	}
+destroy_swapchain :: proc(self: ^Swapchain, loc := #caller_location) {
+	assert(self != nil && self.ptr != 0, "Invalid Swapchain", loc)
+	vk.DestroySwapchainKHR(self.device.ptr, self.ptr, self.allocation_callbacks)
+	free(self, self.allocator)
 }
 
 /* Returns a slice of `vk.Image` handles to the swapchain. */

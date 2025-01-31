@@ -106,22 +106,22 @@ Use the `selection` parameter to configure if partially.
 select_physical_device :: proc(
 	self: ^Physical_Device_Selector,
 	selection: Device_Selection_Mode = .Partially_And_Fully_Suitable,
+	allocator := context.allocator,
 ) -> (
 	physical_device: ^Physical_Device,
 	ok: bool,
 ) #optional_ok {
 	log.info("Selecting a physical device...")
 
-	ta := context.temp_allocator
-	runtime.DEFAULT_TEMP_ALLOCATOR_TEMP_GUARD()
-
-	selected_devices := selector_select_impl(self, selection, ta) or_return
+	selected_devices := selector_select_impl(self, selection, allocator) or_return
+	defer delete(selected_devices, allocator)
 
 	if len(selected_devices) == 0 {
 		log.errorf("No suitable physical devices are found")
 		return
 	}
 
+	// Keep only the first selected device
 	defer if len(selected_devices) > 1 {
 		for &pd, index in selected_devices {
 			if index > 0 {
@@ -160,14 +160,9 @@ selector_select_impl :: proc(
 		}
 	}
 
-	// Get the VkPhysicalDevice handles on the system
-	physical_device_count: u32
-	if res := vk.EnumeratePhysicalDevices(
-		self.instance_info.instance,
-		&physical_device_count,
-		nil,
-	); res != .SUCCESS {
-		log.errorf("Failed to enumerate physical devices count: [%v]", res)
+	ta := context.temp_allocator
+	runtime.DEFAULT_TEMP_ALLOCATOR_TEMP_GUARD(ignore = allocator == ta)
+
 		return
 	}
 

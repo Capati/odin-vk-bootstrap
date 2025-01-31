@@ -1,9 +1,12 @@
 package vk_bootstrap
 
-// Packages
+// Core
 import "base:runtime"
 import "core:log"
+import "core:mem"
 import "core:slice"
+
+// Vendor
 import vk "vendor:vulkan"
 
 Device_Builder :: struct {
@@ -13,6 +16,9 @@ Device_Builder :: struct {
 	p_next_chain:                     [dynamic]^vk.BaseOutStructure,
 	queue_descriptions:               []Custom_Queue_Description,
 	allocation_callbacks:             ^vk.AllocationCallbacks,
+
+	// Internal
+	allocator:                        mem.Allocator,
 }
 
 /* For advanced device queue setup. */
@@ -24,25 +30,46 @@ Custom_Queue_Description :: struct {
 @(require_results)
 init_device_builder :: proc(
 	physical_device: ^Physical_Device,
+	loc := #caller_location,
 ) -> (
 	builder: Device_Builder,
 	ok: bool,
 ) #optional_ok {
+	ensure(physical_device != nil, "Invalid Physical Device", loc)
+
+	builder.allocator = runtime.default_allocator()
+
+	builder.p_next_chain.allocator = builder.allocator
+
 	builder.physical_device = physical_device
+
 	return builder, true
 }
 
 destroy_device_builder :: proc(self: ^Device_Builder) {
+	context.allocator = self.allocator
 	delete(self.p_next_chain)
 }
 
-/* Create a `Device`. Return an error if it failed. */
+/*
+Create a `Device`.
+
+Returns:
+- device: The vkb `Device`.
+- ok: `true` on success or `false` if an error occurred.
+*/
 @(require_results)
-build_device :: proc(self: ^Device_Builder) -> (device: ^Device, ok: bool) #optional_ok {
+build_device :: proc(
+	self: ^Device_Builder,
+	allocator := context.allocator,
+) -> (
+	device: ^Device,
+	ok: bool,
+) #optional_ok {
 	log.info("Requesting a logical device...")
 
 	ta := context.temp_allocator
-	runtime.DEFAULT_TEMP_ALLOCATOR_TEMP_GUARD()
+	runtime.DEFAULT_TEMP_ALLOCATOR_TEMP_GUARD(ignore = allocator == ta)
 
 	queue_descriptions := make([dynamic]Custom_Queue_Description, ta)
 	append(&queue_descriptions, ..self.queue_descriptions[:])
@@ -157,11 +184,12 @@ build_device :: proc(self: ^Device_Builder) -> (device: ^Device, ok: bool) #opti
 	device_create_info.enabledExtensionCount = u32(len(extensions_to_enable))
 	device_create_info.ppEnabledExtensionNames = raw_data(extensions_to_enable[:])
 
-	device = new(Device)
-	ensure(device != nil, "Failed to allocate a device object")
+	device = new(Device, allocator)
+	ensure(device != nil, "Failed to allocate a Device object")
 	defer if !ok {
-		free(device)
+		free(device, allocator)
 	}
+	device.allocator = allocator
 
 	if res := vk.CreateDevice(
 		self.physical_device.ptr,
@@ -179,6 +207,7 @@ build_device :: proc(self: ^Device_Builder) -> (device: ^Device, ok: bool) #opti
 	device.queue_families = make(
 		[]vk.QueueFamilyProperties,
 		len(self.physical_device.queue_families),
+		allocator,
 	)
 	copy(device.queue_families[:], self.physical_device.queue_families[:])
 

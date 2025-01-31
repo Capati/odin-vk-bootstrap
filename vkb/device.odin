@@ -1,7 +1,10 @@
 package vk_bootstrap
 
-// Packages
+// Core
 import "core:log"
+import "core:mem"
+
+// Vendor
 import vk "vendor:vulkan"
 
 Device :: struct {
@@ -11,6 +14,9 @@ Device :: struct {
 	queue_families:       []vk.QueueFamilyProperties,
 	allocation_callbacks: ^vk.AllocationCallbacks,
 	instance_version:     u32,
+
+	// Internal
+	allocator:            mem.Allocator,
 }
 
 Queue_Type :: enum {
@@ -20,13 +26,12 @@ Queue_Type :: enum {
 	Transfer,
 }
 
-destroy_device :: proc(self: ^Device) {
-	if self == nil {
-		return
-	}
-	defer free(self)
+destroy_device :: proc(self: ^Device, loc := #caller_location) {
+	assert(self != nil && self.ptr != nil, "Invalid Device", loc)
+	context.allocator = self.allocator
 	delete(self.queue_families)
 	vk.DestroyDevice(self.ptr, self.allocation_callbacks)
+	free(self)
 }
 
 device_get_queue_index :: proc(

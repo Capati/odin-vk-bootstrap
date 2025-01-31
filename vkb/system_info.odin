@@ -1,8 +1,11 @@
 package vk_bootstrap
 
-// Packages
+// Core
 import "base:runtime"
 import "core:log"
+import "core:mem"
+
+// Vendor
 import vk "vendor:vulkan"
 
 /*
@@ -15,20 +18,30 @@ System_Info :: struct {
 	available_extensions:        []vk.ExtensionProperties,
 	validation_layers_available: bool,
 	debug_utils_available:       bool,
+
+	// internal
+	allocator:                   mem.Allocator,
 }
 
 /* VK_LAYER_KHRONOS_validation */
 VALIDATION_LAYER_NAME :: "VK_LAYER_KHRONOS_validation"
 
 /* Get information about the available vulkan capabilities. */
-get_system_info :: proc() -> (info: System_Info, ok: bool) #optional_ok {
+get_system_info :: proc(
+	allocator := context.allocator,
+) -> (
+	info: System_Info,
+	ok: bool,
+) #optional_ok {
 	layer_count: u32
 	if res := vk.EnumerateInstanceLayerProperties(&layer_count, nil); res != .SUCCESS {
 		log.errorf("Failed to enumerate instance layer properties count: [%v]", res)
 		return
 	}
 
-	info.available_layers = make([]vk.LayerProperties, layer_count)
+	info.allocator = allocator
+
+	info.available_layers = make([]vk.LayerProperties, layer_count, allocator)
 
 	if layer_count > 0 {
 		if res := vk.EnumerateInstanceLayerProperties(
@@ -55,7 +68,7 @@ get_system_info :: proc() -> (info: System_Info, ok: bool) #optional_ok {
 	}
 
 	ta := context.temp_allocator
-	runtime.DEFAULT_TEMP_ALLOCATOR_TEMP_GUARD()
+	runtime.DEFAULT_TEMP_ALLOCATOR_TEMP_GUARD(ignore = allocator == ta)
 
 	available_extensions := make([dynamic]vk.ExtensionProperties, extension_count, ta)
 
@@ -130,13 +143,14 @@ get_system_info :: proc() -> (info: System_Info, ok: bool) #optional_ok {
 		}
 	}
 
-	info.available_extensions = make([]vk.ExtensionProperties, extension_count)
+	info.available_extensions = make([]vk.ExtensionProperties, extension_count, allocator)
 	copy(info.available_extensions[:], available_extensions[:])
 
 	return info, true
 }
 
 destroy_system_info :: proc(self: ^System_Info) {
+	context.allocator = self.allocator
 	delete(self.available_layers)
 	delete(self.available_extensions)
 }

@@ -2,6 +2,7 @@ package vk_bootstrap
 
 // Packages
 import "core:log"
+import "core:mem"
 import vk "vendor:vulkan"
 
 Physical_Device_Suitable :: enum {
@@ -26,13 +27,14 @@ Physical_Device :: struct {
 	defer_surface_initialization: bool,
 	properties2_ext_enabled:      bool,
 	suitable:                     Physical_Device_Suitable,
+
+	// Internal
+	allocator:                    mem.Allocator,
 }
 
-destroy_physical_device :: proc(self: ^Physical_Device) {
-	if self == nil {
-		return
-	}
-	defer free(self)
+destroy_physical_device :: proc(self: ^Physical_Device, loc := #caller_location) {
+	assert(self != nil && self.ptr != nil, "Invalid Physical Device", loc)
+	context.allocator = self.allocator
 	delete(self.extensions_to_enable)
 	delete(self.available_extensions)
 	delete(self.queue_families)
@@ -40,6 +42,7 @@ destroy_physical_device :: proc(self: ^Physical_Device) {
 	if self.name != "" {
 		delete(self.name)
 	}
+	free(self)
 }
 
 physical_device_get_queue_index :: proc(

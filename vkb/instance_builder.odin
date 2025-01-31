@@ -3,6 +3,7 @@ package vk_bootstrap
 // Packages
 import "base:runtime"
 import "core:log"
+import "core:mem"
 import "core:strings"
 import vk "vendor:vulkan"
 
@@ -42,6 +43,9 @@ Instance_Builder :: struct {
 
 	// System information
 	info:                         System_Info,
+
+	// Internal
+	allocator:                    mem.Allocator,
 }
 
 g_logger: log.Logger
@@ -52,6 +56,14 @@ init_instance_builder :: proc() -> (builder: Instance_Builder, ok: bool) #option
 		g_logger = context.logger
 	}
 
+	builder.allocator = runtime.default_allocator()
+
+	builder.layers.allocator = builder.allocator
+	builder.extensions.allocator = builder.allocator
+	builder.disabled_validation_checks.allocator = builder.allocator
+	builder.enabled_validation_features.allocator = builder.allocator
+	builder.disabled_validation_features.allocator = builder.allocator
+
 	builder.minimum_instance_version = vk.API_VERSION_1_0
 	builder.required_api_version = vk.API_VERSION_1_0
 	builder.debug_message_severity = {.WARNING, .ERROR}
@@ -60,20 +72,30 @@ init_instance_builder :: proc() -> (builder: Instance_Builder, ok: bool) #option
 	builder.engine_version = vk.MAKE_VERSION(1, 0, 0)
 	builder.debug_callback = default_debug_callback
 
-	// Get supported layers and extensions
-	builder.info = get_system_info() or_return
+	builder.info = get_system_info(builder.allocator) or_return
 
 	return builder, true
 }
 
 /* Destroy the `Instance_Builder` and internal data. */
 destroy_instance_builder :: proc(self: ^Instance_Builder) {
+	context.allocator = self.allocator
+
+	destroy_system_info(&self.info)
+
+	for name in self.layers {
+		delete(name)
+	}
 	delete(self.layers)
+
+	for name in self.extensions {
+		delete(name)
+	}
 	delete(self.extensions)
+
 	delete(self.disabled_validation_checks)
 	delete(self.enabled_validation_features)
 	delete(self.disabled_validation_features)
-	destroy_system_info(&self.info)
 }
 
 /*
@@ -84,7 +106,13 @@ Returns:
 - ok: `true` on success or `false` if an error occurred.
 */
 @(require_results)
-build_instance :: proc(self: ^Instance_Builder) -> (instance: ^Instance, ok: bool) #optional_ok {
+build_instance :: proc(
+	self: ^Instance_Builder,
+	allocator := context.allocator,
+) -> (
+	instance: ^Instance,
+	ok: bool,
+) #optional_ok {
 	log.info("Building instance...")
 
 	// Initialize with base version
@@ -353,11 +381,12 @@ build_instance :: proc(self: ^Instance_Builder) -> (instance: ^Instance, ok: boo
 		}
 	}
 
-	instance = new(Instance)
+	instance = new(Instance, allocator)
 	ensure(instance != nil, "Failed to allocate an instance object")
 	defer if !ok {
-		free(instance);instance = nil
+		free(instance, allocator)
 	}
+	instance.allocator = allocator
 
 	if res := vk.CreateInstance(&instance_create_info, self.allocation_callbacks, &instance.ptr);
 	   res != .SUCCESS {
@@ -462,12 +491,29 @@ Adds a layer to be enabled.
 
 Will fail to create an instance if the layer isn't available.
 */
-instance_enable_layer :: proc(self: ^Instance_Builder, layer_name: cstring) {
-	if layer_name == nil {
-		return
+instance_enable_layer :: proc(
+	self: ^Instance_Builder,
+	layer_name: string,
+	loc := #caller_location,
+) {
+	assert(layer_name != "", "Invalid layer name", loc)
+	append(&self.layers, strings.clone_to_cstring(layer_name, self.allocator))
+}
+
+/*
+Adds the layers to be enabled.
+
+Will fail to create an instance if the extension isn't available.
+ */
+instance_enable_layers :: proc(
+	self: ^Instance_Builder,
+	layers: []string,
+	loc := #caller_location,
+) {
+	for layer in layers {
+		assert(layer != "", "Invalid layer name", loc)
+		append(&self.layers, strings.clone_to_cstring(layer, self.allocator))
 	}
-	log.debugf("Layer [%s] enabled", layer_name)
-	append(&self.layers, layer_name)
 }
 
 /*
@@ -475,12 +521,13 @@ Adds an extension to be enabled.
 
 Will fail to create an instance if the extension isn't available.
 */
-instance_enable_extension :: proc(self: ^Instance_Builder, extension_name: cstring) {
-	if extension_name == nil {
-		return
-	}
-	log.debugf("Extension [%s] enabled", extension_name)
-	append(&self.extensions, extension_name)
+instance_enable_extension :: proc(
+	self: ^Instance_Builder,
+	extension_name: string,
+	loc := #caller_location,
+) {
+	assert(extension_name != "", "Invalid extension name", loc)
+	append(&self.extensions, strings.clone_to_cstring(extension_name, self.allocator))
 }
 
 /*
@@ -488,8 +535,15 @@ Adds the extensions to be enabled.
 
 Will fail to create an instance if the extension isn't available.
  */
-instance_enable_extensions :: proc(self: ^Instance_Builder, extensions: []cstring) {
-	append(&self.extensions, ..extensions)
+instance_enable_extensions :: proc(
+	self: ^Instance_Builder,
+	extensions: []string,
+	loc := #caller_location,
+) {
+	for ext in extensions {
+		assert(ext != "", "Invalid extension name", loc)
+		append(&self.extensions, strings.clone_to_cstring(ext, self.allocator))
+	}
 }
 
 /*
