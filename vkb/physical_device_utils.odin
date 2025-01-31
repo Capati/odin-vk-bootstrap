@@ -31,185 +31,42 @@ check_device_extension_support :: proc(
 	return
 }
 
+/* Check features 1.0. */
+check_features_10 :: proc(requested, supported: vk.PhysicalDeviceFeatures) -> bool {
+	supported := supported
+	requested := requested
+
+	requested_info := type_info_of(vk.PhysicalDeviceFeatures)
+
+	#partial switch info in requested_info.variant {
+	case runtime.Type_Info_Named:
+		#partial switch field in info.base.variant {
+		case runtime.Type_Info_Struct:
+			for i in 0 ..< field.field_count {
+				name := field.names[i]
+				offset := field.offsets[i]
+
+				requested_value := (^b32)(uintptr(&requested) + offset)^
+				supported_value := (^b32)(uintptr(&supported) + offset)^
+
+				if requested_value && !supported_value {
+					log.warnf("Feature \x1b[33m%s\x1b[0m requested but not supported", name)
+					return false
+				}
+			}
+		}
+	}
+
+	return true
+}
+
 check_device_features_support :: proc(
-	supported: vk.PhysicalDeviceFeatures,
 	requested: vk.PhysicalDeviceFeatures,
-	extension_supported: ^[dynamic]Generic_Feature,
-	extension_requested: ^[dynamic]Generic_Feature,
+	supported: vk.PhysicalDeviceFeatures,
+	extension_requested: []Generic_Feature,
+	extension_supported: []Generic_Feature,
 ) -> bool {
-	if requested.robustBufferAccess && !supported.robustBufferAccess {
-		return false
-	}
-	if requested.fullDrawIndexUint32 && !supported.fullDrawIndexUint32 {
-		return false
-	}
-	if requested.imageCubeArray && !supported.imageCubeArray {
-		return false
-	}
-	if requested.independentBlend && !supported.independentBlend {
-		return false
-	}
-	if requested.geometryShader && !supported.geometryShader {
-		return false
-	}
-	if requested.tessellationShader && !supported.tessellationShader {
-		return false
-	}
-	if requested.sampleRateShading && !supported.sampleRateShading {
-		return false
-	}
-	if requested.dualSrcBlend && !supported.dualSrcBlend {
-		return false
-	}
-	if requested.logicOp && !supported.logicOp {
-		return false
-	}
-	if requested.multiDrawIndirect && !supported.multiDrawIndirect {
-		return false
-	}
-	if requested.drawIndirectFirstInstance && !supported.drawIndirectFirstInstance {
-		return false
-	}
-	if requested.depthClamp && !supported.depthClamp {
-		return false
-	}
-	if requested.depthBiasClamp && !supported.depthBiasClamp {
-		return false
-	}
-	if requested.fillModeNonSolid && !supported.fillModeNonSolid {
-		return false
-	}
-	if requested.depthBounds && !supported.depthBounds {
-		return false
-	}
-	if requested.wideLines && !supported.wideLines {
-		return false
-	}
-	if requested.largePoints && !supported.largePoints {
-		return false
-	}
-	if requested.alphaToOne && !supported.alphaToOne {
-		return false
-	}
-	if requested.multiViewport && !supported.multiViewport {
-		return false
-	}
-	if requested.samplerAnisotropy && !supported.samplerAnisotropy {
-		return false
-	}
-	if requested.textureCompressionETC2 && !supported.textureCompressionETC2 {
-		return false
-	}
-	if requested.textureCompressionASTC_LDR && !supported.textureCompressionASTC_LDR {
-		return false
-	}
-	if requested.textureCompressionBC && !supported.textureCompressionBC {
-		return false
-	}
-	if requested.occlusionQueryPrecise && !supported.occlusionQueryPrecise {
-		return false
-	}
-	if requested.pipelineStatisticsQuery && !supported.pipelineStatisticsQuery {
-		return false
-	}
-	if requested.vertexPipelineStoresAndAtomics && !supported.vertexPipelineStoresAndAtomics {
-		return false
-	}
-	if requested.fragmentStoresAndAtomics && !supported.fragmentStoresAndAtomics {
-		return false
-	}
-	if requested.shaderTessellationAndGeometryPointSize &&
-	   !supported.shaderTessellationAndGeometryPointSize {
-		return false
-	}
-	if requested.shaderImageGatherExtended && !supported.shaderImageGatherExtended {
-		return false
-	}
-	if requested.shaderStorageImageExtendedFormats &&
-	   !supported.shaderStorageImageExtendedFormats {
-		return false
-	}
-	if requested.shaderStorageImageMultisample && !supported.shaderStorageImageMultisample {
-		return false
-	}
-	if requested.shaderStorageImageReadWithoutFormat &&
-	   !supported.shaderStorageImageReadWithoutFormat {
-		return false
-	}
-	if requested.shaderStorageImageWriteWithoutFormat &&
-	   !supported.shaderStorageImageWriteWithoutFormat {
-		return false
-	}
-	if requested.shaderUniformBufferArrayDynamicIndexing &&
-	   !supported.shaderUniformBufferArrayDynamicIndexing {
-		return false
-	}
-	if requested.shaderSampledImageArrayDynamicIndexing &&
-	   !supported.shaderSampledImageArrayDynamicIndexing {
-		return false
-	}
-	if requested.shaderStorageBufferArrayDynamicIndexing &&
-	   !supported.shaderStorageBufferArrayDynamicIndexing {
-		return false
-	}
-	if requested.shaderStorageImageArrayDynamicIndexing &&
-	   !supported.shaderStorageImageArrayDynamicIndexing {
-		return false
-	}
-	if requested.shaderClipDistance && !supported.shaderClipDistance {
-		return false
-	}
-	if requested.shaderCullDistance && !supported.shaderCullDistance {
-		return false
-	}
-	if requested.shaderFloat64 && !supported.shaderFloat64 {
-		return false
-	}
-	if requested.shaderInt64 && !supported.shaderInt64 {
-		return false
-	}
-	if requested.shaderInt16 && !supported.shaderInt16 {
-		return false
-	}
-	if requested.shaderResourceResidency && !supported.shaderResourceResidency {
-		return false
-	}
-	if requested.shaderResourceMinLod && !supported.shaderResourceMinLod {
-		return false
-	}
-	if requested.sparseBinding && !supported.sparseBinding {
-		return false
-	}
-	if requested.sparseResidencyBuffer && !supported.sparseResidencyBuffer {
-		return false
-	}
-	if requested.sparseResidencyImage2D && !supported.sparseResidencyImage2D {
-		return false
-	}
-	if requested.sparseResidencyImage3D && !supported.sparseResidencyImage3D {
-		return false
-	}
-	if requested.sparseResidency2Samples && !supported.sparseResidency2Samples {
-		return false
-	}
-	if requested.sparseResidency4Samples && !supported.sparseResidency4Samples {
-		return false
-	}
-	if requested.sparseResidency8Samples && !supported.sparseResidency8Samples {
-		return false
-	}
-	if requested.sparseResidency16Samples && !supported.sparseResidency16Samples {
-		return false
-	}
-	if requested.sparseResidencyAliased && !supported.sparseResidencyAliased {
-		return false
-	}
-	if requested.variableMultisampleRate && !supported.variableMultisampleRate {
-		return false
-	}
-	if requested.inheritedQueries && !supported.inheritedQueries {
-		return false
-	}
+	check_features_10(requested, supported) or_return
 
 	// Should only be false if extension_supported was unable to be filled out, due to the
 	// physical device not supporting vk.GetPhysicalDeviceFeatures2 in any capacity.

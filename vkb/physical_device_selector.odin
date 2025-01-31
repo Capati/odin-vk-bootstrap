@@ -634,10 +634,10 @@ device_selector_is_device_suitable :: proc(
 	}
 
 	if !check_device_features_support(
-		pd.features,
 		self.criteria.required_features,
-		&pd.extended_features_chain,
-		&self.criteria.extended_features_chain,
+		pd.features,
+		self.criteria.extended_features_chain[:],
+		pd.extended_features_chain[:],
 	) {
 		log.warnf("\x1b[33m%s\x1b[0m: is missing required features support, ignoring...", pd.name)
 		return .No
