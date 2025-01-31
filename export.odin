@@ -3,6 +3,7 @@ package vkb_export
 // Local packages
 import "vkb"
 
+DEFAULT_API_VERSION :: vkb.DEFAULT_API_VERSION
 Device_Builder :: vkb.Device_Builder
 Custom_Queue_Description :: vkb.Custom_Queue_Description
 init_device_builder :: vkb.init_device_builder
@@ -71,6 +72,10 @@ destroy_physical_device_selector :: vkb.destroy_physical_device_selector
 Device_Selection_Mode :: vkb.Device_Selection_Mode
 select_physical_device :: vkb.select_physical_device
 selector_select_impl :: vkb.selector_select_impl
+enumerate_physical_devices :: vkb.enumerate_physical_devices
+fill_physical_device_with_criteria :: vkb.fill_physical_device_with_criteria
+select_first_gpu :: vkb.select_first_gpu
+process_and_sort_devices :: vkb.process_and_sort_devices
 selector_populate_device_details :: vkb.selector_populate_device_details
 device_selector_is_device_suitable :: vkb.device_selector_is_device_suitable
 selector_set_surface :: vkb.selector_set_surface
@@ -100,6 +105,7 @@ selector_check_device_extension_feature_support ::
 	vkb.selector_check_device_extension_feature_support
 
 check_device_extension_support :: vkb.check_device_extension_support
+check_features_10 :: vkb.check_features_10
 check_device_features_support :: vkb.check_device_features_support
 
 Physical_Device_Suitable :: vkb.Physical_Device_Suitable
