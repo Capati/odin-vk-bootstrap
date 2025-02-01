@@ -212,7 +212,7 @@ build_instance :: proc(
 	properties2_ext_enabled :=
 		api_version < vk.API_VERSION_1_1 &&
 		check_extension_supported(
-			&self.info.available_extensions,
+			self.info.available_extensions,
 			vk.KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME,
 		)
 
@@ -226,7 +226,7 @@ build_instance :: proc(
 
 	when ODIN_OS == .Darwin || #config(VK_KHR_portability_enumeration, false) {
 		portability_enumeration_support := check_extension_supported(
-			&self.info.available_extensions,
+			self.info.available_extensions,
 			vk.KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME,
 		)
 
@@ -244,7 +244,7 @@ build_instance :: proc(
 		check_add_window_ext :: proc(
 			extension_name: cstring,
 			required_extensions: ^[dynamic]cstring,
-			available_extensions: ^[]vk.ExtensionProperties,
+			available_extensions: []vk.ExtensionProperties,
 		) -> bool {
 			if check_extension_supported(available_extensions, extension_name) {
 				append(required_extensions, extension_name)
@@ -259,7 +259,7 @@ build_instance :: proc(
 		if !check_add_window_ext(
 			vk.KHR_SURFACE_EXTENSION_NAME,
 			&extensions,
-			&self.info.available_extensions,
+			self.info.available_extensions,
 		) {
 			log.fatalf(
 				"Required base windowing extension \x1b[31m%s\x1b[0m not present!",
@@ -272,20 +272,20 @@ build_instance :: proc(
 			added_window_exts := check_add_window_ext(
 				vk.KHR_WIN32_SURFACE_EXTENSION_NAME,
 				&extensions,
-				&self.info.available_extensions,
+				self.info.available_extensions,
 			)
 		} else when ODIN_OS == .Linux {
 			added_window_exts := check_add_window_ext(
 				"VK_KHR_xcb_surface",
 				&extensions,
-				&self.info.available_extensions,
+				self.info.available_extensions,
 			)
 
 			added_window_exts =
 				check_add_window_ext(
 					"VK_KHR_xlib_surface",
 					&extensions,
-					&self.info.available_extensions,
+					self.info.available_extensions,
 				) ||
 				added_window_exts
 
@@ -293,14 +293,14 @@ build_instance :: proc(
 				check_add_window_ext(
 					vk.KHR_WAYLAND_SURFACE_EXTENSION_NAME,
 					&extensions,
-					&self.info.available_extensions,
+					self.info.available_extensions,
 				) ||
 				added_window_exts
 		} else when ODIN_OS == .Darwin {
 			added_window_exts := check_add_window_ext(
 				vk.EXT_METAL_SURFACE_EXTENSION_NAME,
 				&extensions,
-				&self.info.available_extensions,
+				self.info.available_extensions,
 			)
 		} else {
 			log.fatalf("Unsupported platform!")
@@ -314,8 +314,8 @@ build_instance :: proc(
 	}
 
 	required_extensions_supported := check_extensions_supported(
-		&self.info.available_extensions,
-		&extensions,
+		self.info.available_extensions,
+		extensions[:],
 	)
 
 	if !required_extensions_supported {
@@ -332,7 +332,7 @@ build_instance :: proc(
 		append(&layers, VALIDATION_LAYER_NAME)
 	}
 
-	required_layers_supported := check_layers_supported(&self.info.available_layers, &layers)
+	required_layers_supported := check_layers_supported(self.info.available_layers, layers[:])
 
 	if !required_layers_supported {
 		log.fatalf("Requested layers not present!")

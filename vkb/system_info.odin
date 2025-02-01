@@ -149,32 +149,37 @@ get_system_info :: proc(
 	return info, true
 }
 
+/* Clean up and deallocating resources associated with the `System_Info` object. */
 destroy_system_info :: proc(self: ^System_Info) {
 	context.allocator = self.allocator
 	delete(self.available_layers)
 	delete(self.available_extensions)
 }
 
-/* Returns true if a layer is available. */
+/* Returns `true` if a layer is available. */
 is_layer_available :: proc(self: ^System_Info, layer_name: cstring) -> bool {
 	if layer_name == nil {
 		return false
 	}
-	return check_layer_supported(&self.available_layers, layer_name)
+	return check_layer_supported(self.available_layers, layer_name)
 }
 
-/* Returns true if an extension is available. */
+/* Returns `true` if an extension is available. */
 is_extension_available :: proc(self: ^System_Info, ext_name: cstring) -> bool {
 	if ext_name == nil {
 		return false
 	}
-	return check_extension_supported(&self.available_extensions, ext_name)
+	return check_extension_supported(self.available_extensions, ext_name)
 }
 
-check_layer_supported :: proc(
-	available_layers: ^[]vk.LayerProperties,
+/*
+Checks if a specific Vulkan layer is supported by comparing it against a list of available
+layers.
+ */
+check_layer_supported :: proc "contextless" (
+	available_layers: []vk.LayerProperties,
 	layer_name: cstring,
-) -> bool {
+) -> bool #no_bounds_check {
 	if layer_name == nil {
 		return false
 	}
@@ -188,8 +193,33 @@ check_layer_supported :: proc(
 	return false
 }
 
+/*
+Checks if all required Vulkan layers are supported by comparing them against a list of
+available layers.
+*/
+check_layers_supported :: proc(
+	available_layers: []vk.LayerProperties,
+	required_layers: []cstring,
+) -> bool {
+	all_supported := true
+
+	for layer_name in required_layers {
+		if check_layer_supported(available_layers, layer_name) {
+			continue
+		}
+		log.warnf("Required instance layer \x1b[31m%s\x1b[0m not present!", layer_name)
+		all_supported = false
+	}
+
+	return all_supported
+}
+
+/*
+Checks if a specific Vulkan extension is supported by comparing it against a list of available
+extensions
+*/
 check_extension_supported :: proc(
-	available_extensions: ^[]vk.ExtensionProperties,
+	available_extensions: []vk.ExtensionProperties,
 	ext_name: cstring,
 ) -> bool {
 	if ext_name == nil {
@@ -205,26 +235,13 @@ check_extension_supported :: proc(
 	return false
 }
 
-check_layers_supported :: proc(
-	available_layers: ^[]vk.LayerProperties,
-	required_layers: ^[dynamic]cstring,
-) -> bool {
-	all_supported := true
-
-	for layer_name in required_layers {
-		if check_layer_supported(available_layers, layer_name) {
-			continue
-		}
-		log.warnf("Required instance layer \x1b[31m%s\x1b[0m not present!", layer_name)
-		all_supported = false
-	}
-
-	return all_supported
-}
-
+/*
+Checks if all required Vulkan extensions are supported by comparing them against a list of
+available extensions.
+*/
 check_extensions_supported :: proc(
-	available_extensions: ^[]vk.ExtensionProperties,
-	required_extensions: ^[dynamic]cstring,
+	available_extensions: []vk.ExtensionProperties,
+	required_extensions: []cstring,
 ) -> bool {
 	all_supported := true
 
