@@ -3,6 +3,7 @@ package vk_bootstrap
 // Core
 import "base:runtime"
 import "core:log"
+import "core:mem"
 import "core:slice"
 import "core:strings"
 
@@ -41,6 +42,9 @@ Selection_Criteria :: struct {
 	defer_surface_initialization:     bool,
 	use_first_gpu_unconditionally:    bool,
 	enable_portability_subset:        bool,
+
+	// Internal
+	allocator:                        mem.Allocator,
 }
 
 Preferred_Device_Type :: enum {
@@ -84,10 +88,15 @@ init_physical_device_selector :: proc(
 		},
 	}
 
+	selector.criteria.allocator = runtime.default_allocator()
+	selector.criteria.required_extensions.allocator = selector.criteria.allocator
+	selector.criteria.extended_features_chain.allocator = selector.criteria.allocator
+
 	return selector, true
 }
 
 destroy_physical_device_selector :: proc(self: ^Physical_Device_Selector) {
+	context.allocator = self.criteria.allocator
 	delete(self.criteria.required_extensions)
 	delete(self.criteria.extended_features_chain)
 }
