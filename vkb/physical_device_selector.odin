@@ -407,6 +407,8 @@ selector_populate_device_details :: proc(
 		free(pd, allocator)
 	}
 	pd.allocator = allocator
+	pd.extensions_to_enable.allocator = allocator
+	pd.extended_features_chain.allocator = allocator
 
 	context.allocator = allocator
 
