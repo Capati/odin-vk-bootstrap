@@ -22,6 +22,12 @@ device_get_dedicated_queue_index :: vkb.device_get_dedicated_queue_index
 device_get_queue :: vkb.device_get_queue
 device_get_dedicated_queue :: vkb.device_get_dedicated_queue
 
+FEATURES_BITS_FIELDS_CAPACITY :: vkb.FEATURES_BITS_FIELDS_CAPACITY
+Generic_Feature :: vkb.Generic_Feature
+Generic_Feature_P_Next_Node :: vkb.Generic_Feature_P_Next_Node
+create_generic_features :: vkb.create_generic_features
+generic_features_match :: vkb.generic_features_match
+
 Instance_Builder :: vkb.Instance_Builder
 init_instance_builder :: vkb.init_instance_builder
 destroy_instance_builder :: vkb.destroy_instance_builder
