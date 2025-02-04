@@ -43,6 +43,7 @@ instance_require_api_versioned :: vkb.instance_require_api_versioned
 instance_set_minimum_version :: vkb.instance_set_minimum_version
 instance_set_minimum_versioned :: vkb.instance_set_minimum_versioned
 instance_enable_layer :: vkb.instance_enable_layer
+instance_enable_layers :: vkb.instance_enable_layers
 instance_enable_extension :: vkb.instance_enable_extension
 instance_enable_extensions :: vkb.instance_enable_extensions
 instance_enable_extensions_count :: vkb.instance_enable_extensions_count
