@@ -421,10 +421,11 @@ selector_populate_device_details :: proc(
 	vk.GetPhysicalDeviceProperties(vk_physical_device, &pd.properties)
 
 	// Set device name
-	pd_name := cstring(&pd.properties.deviceName[0])
-	if pd_name != nil {
-		pd.name = strings.clone_from(pd.properties.deviceName[:len(pd_name)])
-	}
+	pd_name := strings.string_from_null_terminated_ptr(
+		&pd.properties.deviceName[0],
+		len(pd.properties.deviceName),
+	)
+	pd.name = strings.clone_from(pd.properties.deviceName[:len(pd_name)])
 
 	// Get the device queue families
 	queue_family_count: u32
