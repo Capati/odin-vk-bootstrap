@@ -49,15 +49,17 @@ destroy_swapchain :: proc(self: ^Swapchain, loc := #caller_location) {
 /* Returns a slice of `vk.Image` handles to the swapchain. */
 swapchain_get_images :: proc(
 	self: ^Swapchain,
+	max_images: u32 = 0,
 	allocator := context.allocator,
 ) -> (
 	images: []vk.Image,
 	ok: bool,
 ) #optional_ok {
+	// Get the number of images in the swapchain
 	image_count: u32 = 0
 	if res := vk.GetSwapchainImagesKHR(self.device.ptr, self.ptr, &image_count, nil);
 	   res != .SUCCESS {
-		log.fatalf("Failed to get swapchain images count: \x1b[31m%v\x1b[0m", res)
+		log.errorf("Failed to get swapchain images count: \x1b[31m%v\x1b[0m", res)
 		return
 	}
 
@@ -66,14 +68,21 @@ swapchain_get_images :: proc(
 		return
 	}
 
+	// Limit the number of images if `max_images` is specified
+	if max_images > 0 && image_count > max_images {
+		image_count = max_images
+	}
+
+	// Allocate memory for the images
 	images = make([]vk.Image, image_count, allocator)
 	defer if !ok {
 		delete(images, allocator)
 	}
 
+	// Retrieve the actual images
 	if res := vk.GetSwapchainImagesKHR(self.device.ptr, self.ptr, &image_count, raw_data(images));
 	   res != .SUCCESS {
-		log.fatalf("Failed to get swapchain images: \x1b[31m%v\x1b[0m", res)
+		log.errorf("Failed to get swapchain images: \x1b[31m%v\x1b[0m", res)
 		return
 	}
 
@@ -92,7 +101,7 @@ swapchain_get_image_views :: proc(
 	ta := context.temp_allocator
 	runtime.DEFAULT_TEMP_ALLOCATOR_TEMP_GUARD(ignore = allocator == ta)
 
-	images := swapchain_get_images(self, ta) or_return
+	images := swapchain_get_images(self, allocator = ta) or_return
 
 	already_contains_image_view_usage := false
 	p_next := p_next

@@ -416,7 +416,7 @@ build_swapchain :: proc(
 	swapchain.image_usage_flags = self.image_usage_flags
 	swapchain.extent = extent
 
-	images := swapchain_get_images(swapchain, ta) or_return
+	images := swapchain_get_images(swapchain, allocator = ta) or_return
 
 	swapchain.requested_min_image_count = image_count
 	swapchain.present_mode = present_mode
