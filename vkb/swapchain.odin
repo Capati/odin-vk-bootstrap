@@ -9,7 +9,7 @@ import "core:mem"
 import vk "vendor:vulkan"
 
 Swapchain :: struct {
-	ptr:                       vk.SwapchainKHR,
+	handle:                    vk.SwapchainKHR,
 	device:                    ^Device,
 	image_count:               u32,
 	queue_indices:             [Queue_Family_Indices]u32,
@@ -41,8 +41,8 @@ Queue_Family_Indices :: enum {
 }
 
 destroy_swapchain :: proc(self: ^Swapchain, loc := #caller_location) {
-	assert(self != nil && self.ptr != 0, "Invalid Swapchain", loc)
-	vk.DestroySwapchainKHR(self.device.ptr, self.ptr, self.allocation_callbacks)
+	assert(self != nil && self.handle != 0, "Invalid Swapchain", loc)
+	vk.DestroySwapchainKHR(self.device.handle, self.handle, self.allocation_callbacks)
 	free(self, self.allocator)
 }
 
@@ -57,7 +57,7 @@ swapchain_get_images :: proc(
 ) #optional_ok {
 	// Get the number of images in the swapchain
 	image_count: u32 = 0
-	if res := vk.GetSwapchainImagesKHR(self.device.ptr, self.ptr, &image_count, nil);
+	if res := vk.GetSwapchainImagesKHR(self.device.handle, self.handle, &image_count, nil);
 	   res != .SUCCESS {
 		log.errorf("Failed to get swapchain images count: \x1b[31m%v\x1b[0m", res)
 		return
@@ -80,8 +80,12 @@ swapchain_get_images :: proc(
 	}
 
 	// Retrieve the actual images
-	if res := vk.GetSwapchainImagesKHR(self.device.ptr, self.ptr, &image_count, raw_data(images));
-	   res != .SUCCESS {
+	if res := vk.GetSwapchainImagesKHR(
+		self.device.handle,
+		self.handle,
+		&image_count,
+		raw_data(images),
+	); res != .SUCCESS {
 		log.errorf("Failed to get swapchain images: \x1b[31m%v\x1b[0m", res)
 		return
 	}
@@ -157,7 +161,7 @@ swapchain_get_image_views :: proc(
 		create_info.subresourceRange.layerCount = 1
 
 		if res := vk.CreateImageView(
-			self.device.ptr,
+			self.device.handle,
 			&create_info,
 			self.allocation_callbacks,
 			&views[i],
@@ -179,6 +183,6 @@ swapchain_destroy_image_views :: proc(self: ^Swapchain, views: []vk.ImageView) {
 			)
 			continue
 		}
-		vk.DestroyImageView(self.device.ptr, view, self.allocation_callbacks)
+		vk.DestroyImageView(self.device.handle, view, self.allocation_callbacks)
 	}
 }

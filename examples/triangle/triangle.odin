@@ -123,7 +123,7 @@ device_initialization :: proc(s: ^State) -> (ok: bool) {
 	}
 
 	// Surface
-	if !sdl.Vulkan_CreateSurface(s.window, s.instance.ptr, &s.surface) {
+	if !sdl.Vulkan_CreateSurface(s.window, s.instance.handle, &s.surface) {
 		log.errorf("SDL couldn't create vulkan surface: %s", sdl.GetError())
 		return
 	}
@@ -220,7 +220,7 @@ create_render_pass :: proc(s: ^State, data: ^Render_Data) -> (ok: bool) {
 		pDependencies   = &dependency,
 	}
 
-	if res := vk.CreateRenderPass(s.device.ptr, &render_pass_info, nil, &data.render_pass);
+	if res := vk.CreateRenderPass(s.device.handle, &render_pass_info, nil, &data.render_pass);
 	   res != .SUCCESS {
 		log.fatalf("Failed to create render pass: [%v]", res)
 		return
@@ -236,7 +236,7 @@ create_shader_module :: proc(s: ^State, code: []u8) -> (shader_module: vk.Shader
 		pCode    = cast(^u32)raw_data(code),
 	}
 
-	if res := vk.CreateShaderModule(s.device.ptr, &vertex_module_info, nil, &shader_module);
+	if res := vk.CreateShaderModule(s.device.handle, &vertex_module_info, nil, &shader_module);
 	   res != .SUCCESS {
 		log.fatalf("failed to create shader module: [%v]", res)
 		return
@@ -249,11 +249,11 @@ create_graphics_pipeline :: proc(s: ^State, data: ^Render_Data) -> (ok: bool) {
 	// Create the modules for each shader
 	vertex_shader_code := #load("./shaders/shader_vert.spv")
 	vertex_shader_module := create_shader_module(s, vertex_shader_code) or_return
-	defer vk.DestroyShaderModule(s.device.ptr, vertex_shader_module, nil)
+	defer vk.DestroyShaderModule(s.device.handle, vertex_shader_module, nil)
 
 	fragment_shader_code := #load("./shaders/shader_frag.spv")
 	fragment_shader_module := create_shader_module(s, fragment_shader_code) or_return
-	defer vk.DestroyShaderModule(s.device.ptr, fragment_shader_module, nil)
+	defer vk.DestroyShaderModule(s.device.handle, fragment_shader_module, nil)
 
 	// Create stage info for each shader
 	vertex_stage_info := vk.PipelineShaderStageCreateInfo {
@@ -373,7 +373,7 @@ create_graphics_pipeline :: proc(s: ^State, data: ^Render_Data) -> (ok: bool) {
 	}
 
 	if res := vk.CreatePipelineLayout(
-		s.device.ptr,
+		s.device.handle,
 		&pipeline_layout_info,
 		nil,
 		&data.pipeline_layout,
@@ -400,7 +400,7 @@ create_graphics_pipeline :: proc(s: ^State, data: ^Render_Data) -> (ok: bool) {
 	}
 
 	if res := vk.CreateGraphicsPipelines(
-		s.device.ptr,
+		s.device.handle,
 		0,
 		1,
 		&pipeline_info,
@@ -434,7 +434,7 @@ create_framebuffers :: proc(s: ^State, data: ^Render_Data) -> (ok: bool) {
 		}
 
 		if res := vk.CreateFramebuffer(
-			s.device.ptr,
+			s.device.handle,
 			&framebuffer_info,
 			nil,
 			&data.frame_buffers[i],
@@ -454,7 +454,7 @@ create_command_pool :: proc(s: ^State, data: ^Render_Data) -> (ok: bool) {
 		queueFamilyIndex = vkb.device_get_queue_index(s.device, .Graphics) or_return,
 	}
 
-	if res := vk.CreateCommandPool(s.device.ptr, &create_info, nil, &data.command_pool);
+	if res := vk.CreateCommandPool(s.device.handle, &create_info, nil, &data.command_pool);
 	   res != .SUCCESS {
 		log.fatalf("Failed to create command pool: [%v]", res)
 		return
@@ -477,7 +477,7 @@ create_command_buffers :: proc(s: ^State, data: ^Render_Data) -> (ok: bool) {
 	}
 
 	if res := vk.AllocateCommandBuffers(
-		s.device.ptr,
+		s.device.handle,
 		&allocate_info,
 		raw_data(data.command_buffers),
 	); res != .SUCCESS {
@@ -573,7 +573,7 @@ create_sync_objects :: proc(s: ^State, data: ^Render_Data) -> (ok: bool) {
 
 	for i in 0 ..< MAX_FRAMES_IN_FLIGHT {
 		if res := vk.CreateSemaphore(
-			s.device.ptr,
+			s.device.handle,
 			&semaphore_info,
 			nil,
 			&data.available_semaphores[i],
@@ -583,7 +583,7 @@ create_sync_objects :: proc(s: ^State, data: ^Render_Data) -> (ok: bool) {
 		}
 
 		if res := vk.CreateSemaphore(
-			s.device.ptr,
+			s.device.handle,
 			&semaphore_info,
 			nil,
 			&data.finished_semaphores[i],
@@ -592,7 +592,7 @@ create_sync_objects :: proc(s: ^State, data: ^Render_Data) -> (ok: bool) {
 			return
 		}
 
-		if res := vk.CreateFence(s.device.ptr, &fence_info, nil, &data.in_flight_fences[i]);
+		if res := vk.CreateFence(s.device.handle, &fence_info, nil, &data.in_flight_fences[i]);
 		   res != .SUCCESS {
 			log.errorf("Failed to create \"in_flight\" fence: [%v]", res)
 			return
@@ -606,14 +606,14 @@ recreate_swapchain :: proc(s: ^State, data: ^Render_Data) -> (ok: bool) {
 	width, height: i32
 	sdl.GetWindowSize(s.window, &width, &height)
 
-	vk.DeviceWaitIdle(s.device.ptr)
+	vk.DeviceWaitIdle(s.device.handle)
 
-	vk.DestroyCommandPool(s.device.ptr, data.command_pool, nil)
+	vk.DestroyCommandPool(s.device.handle, data.command_pool, nil)
 
 	delete(data.command_buffers)
 
 	for &v in data.frame_buffers {
-		vk.DestroyFramebuffer(s.device.ptr, v, nil)
+		vk.DestroyFramebuffer(s.device.handle, v, nil)
 	}
 	delete(data.frame_buffers)
 
@@ -638,13 +638,19 @@ recreate_swapchain :: proc(s: ^State, data: ^Render_Data) -> (ok: bool) {
 }
 
 draw_frame :: proc(s: ^State, data: ^Render_Data) -> (ok: bool) {
-	vk.WaitForFences(s.device.ptr, 1, &data.in_flight_fences[data.current_frame], true, max(u64))
-	vk.ResetFences(s.device.ptr, 1, &data.in_flight_fences[data.current_frame])
+	vk.WaitForFences(
+		s.device.handle,
+		1,
+		&data.in_flight_fences[data.current_frame],
+		true,
+		max(u64),
+	)
+	vk.ResetFences(s.device.handle, 1, &data.in_flight_fences[data.current_frame])
 
 	image_index: u32 = 0
 	if res := vk.AcquireNextImageKHR(
-		s.device.ptr,
-		s.swapchain.ptr,
+		s.device.handle,
+		s.swapchain.handle,
 		max(u64),
 		data.available_semaphores[data.current_frame],
 		0,
@@ -683,7 +689,7 @@ draw_frame :: proc(s: ^State, data: ^Render_Data) -> (ok: bool) {
 		return
 	}
 
-	swapchains := []vk.SwapchainKHR{s.swapchain.ptr}
+	swapchains := []vk.SwapchainKHR{s.swapchain.handle}
 	present_info := vk.PresentInfoKHR {
 		sType              = .PRESENT_INFO_KHR,
 		waitSemaphoreCount = 1,
@@ -710,12 +716,12 @@ draw_frame :: proc(s: ^State, data: ^Render_Data) -> (ok: bool) {
 }
 
 cleanup :: proc(s: ^State, data: ^Render_Data) {
-	vk.DeviceWaitIdle(s.device.ptr)
+	vk.DeviceWaitIdle(s.device.handle)
 
 	for i in 0 ..< MAX_FRAMES_IN_FLIGHT {
-		vk.DestroySemaphore(s.device.ptr, data.finished_semaphores[i], nil)
-		vk.DestroySemaphore(s.device.ptr, data.available_semaphores[i], nil)
-		vk.DestroyFence(s.device.ptr, data.in_flight_fences[i], nil)
+		vk.DestroySemaphore(s.device.handle, data.finished_semaphores[i], nil)
+		vk.DestroySemaphore(s.device.handle, data.available_semaphores[i], nil)
+		vk.DestroyFence(s.device.handle, data.in_flight_fences[i], nil)
 	}
 
 	delete(data.finished_semaphores)
@@ -723,25 +729,25 @@ cleanup :: proc(s: ^State, data: ^Render_Data) {
 	delete(data.in_flight_fences)
 
 	// vk.FreeCommandBuffers(
-	// 	s.device.ptr,
+	// 	s.device.handle,
 	// 	data.command_pool,
 	// 	u32(len(data.command_buffers)),
 	// 	raw_data(data.command_buffers),
 	// )
 
-	vk.DestroyCommandPool(s.device.ptr, data.command_pool, nil)
+	vk.DestroyCommandPool(s.device.handle, data.command_pool, nil)
 
 	delete(data.command_buffers)
 
 	for &v in data.frame_buffers {
-		vk.DestroyFramebuffer(s.device.ptr, v, nil)
+		vk.DestroyFramebuffer(s.device.handle, v, nil)
 	}
 	delete(data.frame_buffers)
 	delete(data.swapchain_images)
 
-	vk.DestroyPipeline(s.device.ptr, data.graphics_pipeline, nil)
-	vk.DestroyPipelineLayout(s.device.ptr, data.pipeline_layout, nil)
-	vk.DestroyRenderPass(s.device.ptr, data.render_pass, nil)
+	vk.DestroyPipeline(s.device.handle, data.graphics_pipeline, nil)
+	vk.DestroyPipelineLayout(s.device.handle, data.pipeline_layout, nil)
+	vk.DestroyRenderPass(s.device.handle, data.render_pass, nil)
 
 	vkb.swapchain_destroy_image_views(s.swapchain, data.swapchain_image_views)
 	delete(data.swapchain_image_views)

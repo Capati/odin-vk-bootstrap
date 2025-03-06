@@ -14,7 +14,7 @@ Physical_Device_Suitable :: enum {
 }
 
 Physical_Device :: struct {
-	ptr:                          vk.PhysicalDevice,
+	handle:                       vk.PhysicalDevice,
 	name:                         string,
 	surface:                      vk.SurfaceKHR,
 	features:                     vk.PhysicalDeviceFeatures,
@@ -35,7 +35,7 @@ Physical_Device :: struct {
 }
 
 destroy_physical_device :: proc(self: ^Physical_Device, loc := #caller_location) {
-	assert(self != nil && self.ptr != nil, "Invalid Physical Device", loc)
+	assert(self != nil && self.handle != nil, "Invalid Physical Device", loc)
 	context.allocator = self.allocator
 	delete(self.extensions_to_enable)
 	delete(self.available_extensions)
@@ -58,7 +58,7 @@ physical_device_get_queue_index :: proc(
 
 	switch type {
 	case .Present:
-		index = get_present_queue_index(self.queue_families, self.ptr, self.surface)
+		index = get_present_queue_index(self.queue_families, self.handle, self.surface)
 		if index == vk.QUEUE_FAMILY_IGNORED {
 			log.error("Present queue index unavailable.")
 			return

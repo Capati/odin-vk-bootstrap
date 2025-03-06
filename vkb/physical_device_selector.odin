@@ -64,7 +64,7 @@ init_physical_device_selector :: proc(
 ) #optional_ok {
 	selector = Physical_Device_Selector {
 		instance_info = Instance_Info {
-			instance = instance.ptr,
+			instance = instance.handle,
 			surface = 0,
 			version = instance.instance_version,
 			headless = instance.headless,
@@ -412,7 +412,7 @@ selector_populate_device_details :: proc(
 
 	context.allocator = allocator
 
-	pd.ptr = vk_physical_device
+	pd.handle = vk_physical_device
 	pd.surface = self.instance_info.surface
 	pd.defer_surface_initialization = self.criteria.defer_surface_initialization
 	pd.instance_version = self.instance_info.version
@@ -569,7 +569,7 @@ device_selector_is_device_suitable :: proc(
 		vk.QUEUE_FAMILY_IGNORED
 
 	present_queue :=
-		get_present_queue_index(pd.queue_families, pd.ptr, self.instance_info.surface) !=
+		get_present_queue_index(pd.queue_families, pd.handle, self.instance_info.surface) !=
 		vk.QUEUE_FAMILY_IGNORED
 
 	if self.criteria.require_dedicated_compute_queue && !dedicated_compute {
@@ -623,7 +623,7 @@ device_selector_is_device_suitable :: proc(
 		// Supported formats
 		format_count: u32
 		if res := vk.GetPhysicalDeviceSurfaceFormatsKHR(
-			pd.ptr,
+			pd.handle,
 			self.instance_info.surface,
 			&format_count,
 			nil,
@@ -644,7 +644,7 @@ device_selector_is_device_suitable :: proc(
 		// Supported present modes
 		present_mode_count: u32
 		if res := vk.GetPhysicalDeviceSurfacePresentModesKHR(
-			pd.ptr,
+			pd.handle,
 			self.instance_info.surface,
 			&present_mode_count,
 			nil,
@@ -932,9 +932,9 @@ selector_check_device_extension_feature_support :: proc(
 	}
 
 	if (instance_is_1_1) {
-		vk.GetPhysicalDeviceFeatures2(physical_device.ptr, &local_features)
+		vk.GetPhysicalDeviceFeatures2(physical_device.handle, &local_features)
 	} else {
-		vk.GetPhysicalDeviceFeatures2KHR(physical_device.ptr, &local_features)
+		vk.GetPhysicalDeviceFeatures2KHR(physical_device.handle, &local_features)
 	}
 
 	return
