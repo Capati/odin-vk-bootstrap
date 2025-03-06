@@ -101,13 +101,6 @@ destroy_physical_device_selector :: proc(self: ^Physical_Device_Selector) {
 	delete(self.criteria.extended_features_chain)
 }
 
-Device_Selection_Mode :: enum {
-	// Return all suitable and partially suitable devices
-	Partially_And_Fully_Suitable,
-	// Return only physical devices which are fully suitable
-	Only_Fully_Suitable,
-}
-
 /*
 Return the first device which is suitable.
 
@@ -116,7 +109,6 @@ Use the `selection` parameter to configure if partially.
 @(require_results)
 select_physical_device :: proc(
 	self: ^Physical_Device_Selector,
-	selection: Device_Selection_Mode = .Partially_And_Fully_Suitable,
 	allocator := context.allocator,
 ) -> (
 	physical_device: ^Physical_Device,
@@ -124,7 +116,7 @@ select_physical_device :: proc(
 ) #optional_ok {
 	log.info("Selecting a physical device...")
 
-	selected_devices := selector_select_impl(self, selection, allocator) or_return
+	selected_devices := selector_select_impl(self, allocator) or_return
 	defer delete(selected_devices, allocator)
 
 	if len(selected_devices) == 0 {
@@ -150,7 +142,6 @@ select_physical_device :: proc(
 
 selector_select_impl :: proc(
 	self: ^Physical_Device_Selector,
-	selection: Device_Selection_Mode,
 	allocator := context.allocator,
 ) -> (
 	physical_devices: []^Physical_Device,
@@ -177,7 +168,7 @@ selector_select_impl :: proc(
 	}
 
 	// Process all devices and sort them
-	return process_and_sort_devices(self, vk_physical_devices, selection, allocator)
+	return process_and_sort_devices(self, vk_physical_devices, allocator)
 }
 
 enumerate_physical_devices :: proc(
@@ -263,7 +254,6 @@ select_first_gpu :: proc(
 process_and_sort_devices :: proc(
 	self: ^Physical_Device_Selector,
 	vk_physical_devices: []vk.PhysicalDevice,
-	selection: Device_Selection_Mode,
 	allocator := context.allocator,
 ) -> (
 	physical_devices: []^Physical_Device,
@@ -363,29 +353,23 @@ process_and_sort_devices :: proc(
 		return a.score > b.score
 	})
 
-	// Filter and copy to output
-	fully_supported_count := 0
+	// Filter and copy to output, placing suitable devices first
+	resize(&out, len(scored_devices))
+	device_idx := 0
+
+	// First pass: add all fully suitable devices
 	for device in scored_devices {
 		if device.device.suitable == .Yes {
-			fully_supported_count += 1
+			out[device_idx] = device.device
+			device_idx += 1
 		}
 	}
 
-	if selection == .Only_Fully_Suitable && fully_supported_count > 0 {
-		resize(&out, fully_supported_count)
-		device_idx := 0
-		for device in scored_devices {
-			if device.device.suitable == .Yes {
-				out[device_idx] = device.device
-				device_idx += 1
-			} else {
-				destroy_physical_device(device.device)
-			}
-		}
-	} else {
-		resize(&out, len(scored_devices))
-		for device, i in scored_devices {
-			out[i] = device.device
+	// Second pass: add remaining partial devices
+	for device in scored_devices {
+		if device.device.suitable != .Yes {
+			out[device_idx] = device.device
+			device_idx += 1
 		}
 	}
 
