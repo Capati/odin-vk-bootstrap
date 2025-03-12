@@ -492,16 +492,8 @@ swapchain_builder_use_default_format_selection :: proc(self: ^Swapchain_Builder)
 	swapchain_builder_utils_add_desired_formats(&self.desired_formats)
 }
 
-/* When determining the present mode, make this the first to be used if supported. */
+// When determining the present mode, make this the first to be used if supported.
 swapchain_builder_set_present_mode :: proc(
-	self: ^Swapchain_Builder,
-	present_mode: vk.PresentModeKHR,
-) {
-	inject_at(&self.desired_present_modes, 0, present_mode)
-}
-
-/* Add this present mode to the end of the list of present modes selected from. */
-swapchain_builder_add_fallback_present_mode :: proc(
 	self: ^Swapchain_Builder,
 	present_mode: vk.PresentModeKHR,
 ) {
@@ -511,7 +503,7 @@ swapchain_builder_add_fallback_present_mode :: proc(
 /*
 Use the default presentation mode. This is done if no present modes are provided.
 
-Default present modes: `vk.PRESENT_MODE_MAILBOX_KHR` with fallback `vk.PRESENT_MODE_FIFO_KHR`
+Default present modes: `MAILBOX` with fallback `FIFO`.
  */
 swapchain_builder_use_default_present_mode_selection :: proc(self: ^Swapchain_Builder) {
 	clear(&self.desired_present_modes)

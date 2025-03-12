@@ -15,8 +15,8 @@ swapchain_builder_utils_add_desired_formats :: proc(formats: ^[dynamic]vk.Surfac
 swapchain_builder_utils_add_desired_present_modes :: proc(
 	present_modes: ^[dynamic]vk.PresentModeKHR,
 ) {
-	append(present_modes, vk.PresentModeKHR.MAILBOX)
 	append(present_modes, vk.PresentModeKHR.FIFO)
+	append(present_modes, vk.PresentModeKHR.MAILBOX)
 }
 
 Surface_Support_Details :: struct {
@@ -182,7 +182,7 @@ swapchain_builder_utils_find_present_mode :: proc(
 	available_resent_modes: ^[]vk.PresentModeKHR,
 	desired_present_modes: ^[dynamic]vk.PresentModeKHR,
 ) -> vk.PresentModeKHR {
-	for desired in desired_present_modes {
+	#reverse for desired in desired_present_modes {
 		for available in available_resent_modes {
 			// finds the first present mode that is desired and available
 			if (desired == available) {
