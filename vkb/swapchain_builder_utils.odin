@@ -1,9 +1,6 @@
 #+private
 package vk_bootstrap
 
-// Core
-import "core:log"
-
 // Vendor
 import vk "vendor:vulkan"
 
@@ -34,7 +31,7 @@ swapchain_builder_utils_query_surface_support_details :: proc(
 	ok: bool,
 ) #optional_ok {
 	if surface == 0 {
-		log.error("Surface handle cannot be null")
+		log_error("Surface handle cannot be null")
 		return
 	}
 
@@ -44,7 +41,7 @@ swapchain_builder_utils_query_surface_support_details :: proc(
 		surface,
 		&details.capabilities,
 	); res != .SUCCESS {
-		log.fatalf("Failed to get physical device surface capabilities? \x1b[31m%v\x1b[0m", res)
+		log_fatalf("Failed to get physical device surface capabilities? \x1b[31m%v\x1b[0m", res)
 		return
 	}
 
@@ -52,12 +49,12 @@ swapchain_builder_utils_query_surface_support_details :: proc(
 	format_count: u32
 	if res := vk.GetPhysicalDeviceSurfaceFormatsKHR(physical_device, surface, &format_count, nil);
 	   res != .SUCCESS {
-		log.fatalf("Failed to get surface formats count: \x1b[31m%v\x1b[0m", res)
+		log_fatalf("Failed to get surface formats count: \x1b[31m%v\x1b[0m", res)
 		return
 	}
 
 	if format_count == 0 {
-		log.fatal("No surface format found!")
+		log_fatal("No surface format found!")
 		return
 	}
 
@@ -72,7 +69,7 @@ swapchain_builder_utils_query_surface_support_details :: proc(
 		&format_count,
 		raw_data(details.formats),
 	); res != .SUCCESS {
-		log.fatalf("Failed to get surface formats: \x1b[31m%v\x1b[0m", res)
+		log_fatalf("Failed to get surface formats: \x1b[31m%v\x1b[0m", res)
 		return
 	}
 
@@ -84,12 +81,12 @@ swapchain_builder_utils_query_surface_support_details :: proc(
 		&present_mode_count,
 		nil,
 	); res != .SUCCESS {
-		log.fatalf("Failed to get surface present modes count: \x1b[31m%v\x1b[0m", res)
+		log_fatalf("Failed to get surface present modes count: \x1b[31m%v\x1b[0m", res)
 		return
 	}
 
 	if present_mode_count == 0 {
-		log.fatal("No surface present mode found.")
+		log_fatal("No surface present mode found.")
 		return
 	}
 
@@ -104,7 +101,7 @@ swapchain_builder_utils_query_surface_support_details :: proc(
 		&present_mode_count,
 		raw_data(details.present_modes),
 	); res != .SUCCESS {
-		log.fatalf("Failed to get surface present modes: \x1b[31m%v\x1b[0m", res)
+		log_fatalf("Failed to get surface present modes: \x1b[31m%v\x1b[0m", res)
 		return
 	}
 
@@ -123,7 +120,7 @@ swapchain_builder_utils_find_best_surface_format :: proc(
 	}
 
 	// Use the first available format as a fallback if any desired formats aren't found
-	log.warnf(
+	log_warnf(
 		"Desired surface formats not found, fallback to the first available format: " +
 		"\x1b[33m%v\x1b[0m | \x1b[33m%v\x1b[0m",
 		available_formats[0].format,
@@ -149,7 +146,7 @@ swapchain_builder_utils_find_desired_surface_format :: proc(
 		}
 	}
 
-	log.warn("No suitable desired format")
+	log_warn("No suitable desired format")
 
 	// if no desired format is available,
 	// we report that no format is suitable to the user request

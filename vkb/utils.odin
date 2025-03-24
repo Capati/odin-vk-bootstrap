@@ -1,14 +1,7 @@
 package vk_bootstrap
 
-// Core
-import "core:log"
-
 // Vendor
 import vk "vendor:vulkan"
-
-set_logger :: proc(logger: log.Logger) {
-	g_logger = logger
-}
 
 setup_p_next_chain :: proc(structure: ^$T, structs: ^[dynamic]^vk.BaseOutStructure) {
 	structure.pNext = nil

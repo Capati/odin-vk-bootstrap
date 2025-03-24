@@ -2,7 +2,6 @@ package vk_bootstrap
 
 // Core
 import "base:runtime"
-import "core:log"
 import "core:mem"
 import "core:slice"
 import "core:strings"
@@ -114,13 +113,13 @@ select_physical_device :: proc(
 	physical_device: ^Physical_Device,
 	ok: bool,
 ) #optional_ok {
-	log.info("Selecting a physical device...")
+	log_info("Selecting a physical device...")
 
 	selected_devices := selector_select_impl(self, allocator) or_return
 	defer delete(selected_devices, allocator)
 
 	if len(selected_devices) == 0 {
-		log.errorf("No suitable physical devices are found")
+		log_errorf("No suitable physical devices are found")
 		return
 	}
 
@@ -135,7 +134,7 @@ select_physical_device :: proc(
 
 	physical_device = selected_devices[0]
 
-	log.debugf("Selected physical device: \x1b[32m%s\x1b[0m", physical_device.name)
+	log_debugf("Selected physical device: \x1b[32m%s\x1b[0m", physical_device.name)
 
 	return physical_device, true
 }
@@ -150,7 +149,7 @@ selector_select_impl :: proc(
 	// Validate selection requirements
 	if (self.criteria.require_present && !self.criteria.defer_surface_initialization) {
 		if (self.instance_info.surface == 0) {
-			log.errorf("Present is required, but no surface is provided.")
+			log_errorf("Present is required, but no surface is provided.")
 			return
 		}
 	}
@@ -180,18 +179,18 @@ enumerate_physical_devices :: proc(
 ) {
 	count: u32
 	if res := vk.EnumeratePhysicalDevices(instance, &count, nil); res != .SUCCESS {
-		log.errorf("Failed to enumerate physical devices count: \x1b[31m%v\x1b[0m", res)
+		log_errorf("Failed to enumerate physical devices count: \x1b[31m%v\x1b[0m", res)
 		return
 	}
 
 	if count == 0 {
-		log.errorf("No physical device with Vulkan support detected.")
+		log_errorf("No physical device with Vulkan support detected.")
 		return
 	}
 
 	devices = make([]vk.PhysicalDevice, count, allocator)
 	if res := vk.EnumeratePhysicalDevices(instance, &count, raw_data(devices)); res != .SUCCESS {
-		log.errorf("Failed to enumerate physical devices: \x1b[31m%v\x1b[0m", res)
+		log_errorf("Failed to enumerate physical devices: \x1b[31m%v\x1b[0m", res)
 		return
 	}
 
@@ -344,7 +343,7 @@ process_and_sort_devices :: proc(
 	}
 
 	if len(scored_devices) == 0 {
-		log.error("No suitable device found")
+		log_error("No suitable device found")
 		return
 	}
 
@@ -416,7 +415,7 @@ selector_populate_device_details :: proc(
 	vk.GetPhysicalDeviceQueueFamilyProperties(vk_physical_device, &queue_family_count, nil)
 
 	if queue_family_count == 0 {
-		log.errorf("\x1b[31m%s\x1b[0m: No queue family properties found", pd.name)
+		log_errorf("\x1b[31m%s\x1b[0m: No queue family properties found", pd.name)
 		return
 	}
 
@@ -439,7 +438,7 @@ selector_populate_device_details :: proc(
 	property_count: u32
 	if res := vk.EnumerateDeviceExtensionProperties(vk_physical_device, nil, &property_count, nil);
 	   res != .SUCCESS {
-		log.errorf(
+		log_errorf(
 			"Failed to enumerate device extensions properties count: \x1b[31m%v\x1b[0m",
 			res,
 		)
@@ -447,7 +446,7 @@ selector_populate_device_details :: proc(
 	}
 
 	if property_count == 0 {
-		log.errorf("\x1b[31m%s\x1b[0m: No device extension properties found", pd.name)
+		log_errorf("\x1b[31m%s\x1b[0m: No device extension properties found", pd.name)
 		return
 	}
 
@@ -459,7 +458,7 @@ selector_populate_device_details :: proc(
 		&property_count,
 		raw_data(pd.available_extensions),
 	); res != .SUCCESS {
-		log.errorf("Failed to enumerate device extensions properties: \x1b[31m%v\x1b[0m", res)
+		log_errorf("Failed to enumerate device extensions properties: \x1b[31m%v\x1b[0m", res)
 		return
 	}
 	defer if !ok {
@@ -504,7 +503,7 @@ device_selector_is_device_suitable :: proc(
 
 	// Check if physical device name match criteria
 	if self.criteria.name != "" && self.criteria.name != pd.name {
-		log.warnf(
+		log_warnf(
 			"\x1b[33m%s\x1b[0m: is not the required \x1b[33m%s\x1b[0m, ignoring...",
 			pd.name,
 			self.criteria.name,
@@ -521,7 +520,7 @@ device_selector_is_device_suitable :: proc(
 		required_minor := VK_VERSION_MINOR(self.criteria.required_version)
 		required_patch := VK_VERSION_PATCH(self.criteria.required_version)
 
-		log.warnf(
+		log_warnf(
 			"\x1b[33m%s\x1b[0m: Device supports API version [%d.%d.%d] " +
 			"but [%d.%d.%d] is required, ignoring...",
 			pd.name,
@@ -557,7 +556,7 @@ device_selector_is_device_suitable :: proc(
 		vk.QUEUE_FAMILY_IGNORED
 
 	if self.criteria.require_dedicated_compute_queue && !dedicated_compute {
-		log.warnf(
+		log_warnf(
 			"\x1b[33m%s\x1b[0m: does not support dedicated compute queue, ignoring...",
 			pd.name,
 		)
@@ -565,7 +564,7 @@ device_selector_is_device_suitable :: proc(
 	}
 
 	if self.criteria.require_dedicated_transfer_queue && !dedicated_transfer {
-		log.warnf(
+		log_warnf(
 			"\x1b[33m%s\x1b[0m: does not support transfer compute queue, ignoring...",
 			pd.name,
 		)
@@ -573,7 +572,7 @@ device_selector_is_device_suitable :: proc(
 	}
 
 	if self.criteria.require_separate_compute_queue && !separate_compute {
-		log.warnf(
+		log_warnf(
 			"\x1b[33m%s\x1b[0m: does not support separate compute queue, ignoring...",
 			pd.name,
 		)
@@ -581,7 +580,7 @@ device_selector_is_device_suitable :: proc(
 	}
 
 	if self.criteria.require_separate_transfer_queue && !separate_transfer {
-		log.warnf(
+		log_warnf(
 			"\x1b[33m%s\x1b[0m: does not support separate transfer queue, ignoring...",
 			pd.name,
 		)
@@ -591,7 +590,7 @@ device_selector_is_device_suitable :: proc(
 	if self.criteria.require_present &&
 	   !present_queue &&
 	   !self.criteria.defer_surface_initialization {
-		log.warnf("\x1b[33m%s\x1b[0m: has no present queue, ignoring...", pd.name)
+		log_warnf("\x1b[33m%s\x1b[0m: has no present queue, ignoring...", pd.name)
 		return .No
 	}
 
@@ -599,7 +598,7 @@ device_selector_is_device_suitable :: proc(
 		&pd.available_extensions,
 		self.criteria.required_extensions[:],
 	) {
-		log.warnf("\x1b[33m%s\x1b[0m: is missing required extensions, ignoring...", pd.name)
+		log_warnf("\x1b[33m%s\x1b[0m: is missing required extensions, ignoring...", pd.name)
 		return .No
 	}
 
@@ -612,7 +611,7 @@ device_selector_is_device_suitable :: proc(
 			&format_count,
 			nil,
 		); res != .SUCCESS {
-			log.errorf(
+			log_errorf(
 				"\x1b[33m%s\x1b[0m: Failed to get physical device surface formats: " +
 				"\x1b[33m%v\x1b[0m, ignoring...",
 				pd.name,
@@ -633,7 +632,7 @@ device_selector_is_device_suitable :: proc(
 			&present_mode_count,
 			nil,
 		); res != .SUCCESS {
-			log.errorf(
+			log_errorf(
 				"\x1b[33m%s\x1b[0m: Failed to get physical device surface present modes: " +
 				"\x1b[33m%v\x1b[0m, ignoring...",
 				pd.name,
@@ -643,14 +642,14 @@ device_selector_is_device_suitable :: proc(
 		}
 
 		if present_mode_count == 0 {
-			log.warnf("\x1b[33m%s\x1b[0m: has no present modes, ignoring...", pd.name)
+			log_warnf("\x1b[33m%s\x1b[0m: has no present modes, ignoring...", pd.name)
 			return .No
 		}
 	}
 
 	if !self.criteria.allow_any_type &&
 	   pd.properties.deviceType != cast(vk.PhysicalDeviceType)self.criteria.preferred_type {
-		log.warnf(
+		log_warnf(
 			"\x1b[33m%s\x1b[0m: is not of preferred type: \x1b[33m%v\x1b[0m, mark as 'Partial'",
 			pd.name,
 			self.criteria.preferred_type,
@@ -664,7 +663,7 @@ device_selector_is_device_suitable :: proc(
 		self.criteria.extended_features_chain[:],
 		pd.extended_features_chain[:],
 	) {
-		log.warnf("\x1b[33m%s\x1b[0m: is missing required features support, ignoring...", pd.name)
+		log_warnf("\x1b[33m%s\x1b[0m: is missing required features support, ignoring...", pd.name)
 		return .No
 	}
 
@@ -672,7 +671,7 @@ device_selector_is_device_suitable :: proc(
 	for i: u32 = 0; i < pd.memory_properties.memoryHeapCount; i += 1 {
 		if .DEVICE_LOCAL in pd.memory_properties.memoryHeaps[i].flags {
 			if pd.memory_properties.memoryHeaps[i].size < self.criteria.required_mem_size {
-				log.warnf(
+				log_warnf(
 					"\x1b[33m%s\x1b[0m: does not have required \x1b[33m%d\x1b[0m memory, " +
 					"ignoring...",
 					pd.name,

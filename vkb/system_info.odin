@@ -2,7 +2,6 @@ package vk_bootstrap
 
 // Core
 import "base:runtime"
-import "core:log"
 import "core:mem"
 
 // Vendor
@@ -35,7 +34,7 @@ get_system_info :: proc(
 ) #optional_ok {
 	layer_count: u32
 	if res := vk.EnumerateInstanceLayerProperties(&layer_count, nil); res != .SUCCESS {
-		log.errorf("Failed to enumerate instance layer properties count: \x1b[31m%v\x1b[0m", res)
+		log_errorf("Failed to enumerate instance layer properties count: \x1b[31m%v\x1b[0m", res)
 		return
 	}
 
@@ -48,7 +47,7 @@ get_system_info :: proc(
 			&layer_count,
 			raw_data(info.available_layers),
 		); res != .SUCCESS {
-			log.errorf("Failed to enumerate instance layer properties: \x1b[31m%v\x1b[0m", res)
+			log_errorf("Failed to enumerate instance layer properties: \x1b[31m%v\x1b[0m", res)
 			return
 		}
 
@@ -63,7 +62,7 @@ get_system_info :: proc(
 	extension_count: u32 = 0
 	if res := vk.EnumerateInstanceExtensionProperties(nil, &extension_count, nil);
 	   res != .SUCCESS {
-		log.errorf("Failed to enumerate instance extension properties: \x1b[31m%v\x1b[0m", res)
+		log_errorf("Failed to enumerate instance extension properties: \x1b[31m%v\x1b[0m", res)
 		return
 	}
 
@@ -78,7 +77,7 @@ get_system_info :: proc(
 			&extension_count,
 			raw_data(available_extensions),
 		); res != .SUCCESS {
-			log.errorf("Failed to enumerate instance extension properties: \x1b[31m%v\x1b[0m", res)
+			log_errorf("Failed to enumerate instance extension properties: \x1b[31m%v\x1b[0m", res)
 			return
 		}
 
@@ -99,7 +98,7 @@ get_system_info :: proc(
 			&layer_extension_count,
 			nil,
 		); res != .SUCCESS {
-			log.errorf("Failed to enumerate layer extension properties: \x1b[31m%v\x1b[0m", res)
+			log_errorf("Failed to enumerate layer extension properties: \x1b[31m%v\x1b[0m", res)
 			return
 		}
 
@@ -114,7 +113,7 @@ get_system_info :: proc(
 			&layer_extension_count,
 			raw_data(layer_extensions),
 		); res != .SUCCESS {
-			log.errorf("Failed to enumerate layer extension properties: \x1b[31m%v\x1b[0m", res)
+			log_errorf("Failed to enumerate layer extension properties: \x1b[31m%v\x1b[0m", res)
 			return
 		}
 
@@ -207,7 +206,7 @@ check_layers_supported :: proc(
 		if check_layer_supported(available_layers, layer_name) {
 			continue
 		}
-		log.warnf("Required instance layer \x1b[31m%s\x1b[0m not present!", layer_name)
+		log_warnf("Required instance layer \x1b[31m%s\x1b[0m not present!", layer_name)
 		all_supported = false
 	}
 
@@ -249,7 +248,7 @@ check_extensions_supported :: proc(
 		if check_extension_supported(available_extensions, ext_name) {
 			continue
 		}
-		log.errorf("Required instance extension \x1b[33m%s\x1b[0m not present!", ext_name)
+		log_errorf("Required instance extension \x1b[33m%s\x1b[0m not present!", ext_name)
 		all_supported = false
 	}
 

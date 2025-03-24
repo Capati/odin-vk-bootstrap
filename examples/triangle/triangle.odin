@@ -763,8 +763,10 @@ cleanup :: proc(s: ^State, data: ^Render_Data) {
 
 main :: proc() {
 	when ODIN_DEBUG {
-		context.logger = log.create_console_logger(opt = {.Level, .Terminal_Color})
-		defer log.destroy_console_logger(context.logger)
+		logger := log.create_console_logger(opt = {.Level, .Terminal_Color})
+		defer log.destroy_console_logger(logger)
+
+		vkb.set_logger(logger)
 
 		track: mem.Tracking_Allocator
 		mem.tracking_allocator_init(&track, context.allocator)

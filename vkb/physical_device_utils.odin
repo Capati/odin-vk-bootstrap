@@ -2,7 +2,6 @@ package vk_bootstrap
 
 // Core
 import "base:runtime"
-import "core:log"
 
 // Vendor
 import vk "vendor:vulkan"
@@ -25,7 +24,7 @@ check_device_extension_support :: proc(
 				continue required_loop
 			}
 		}
-		log.warnf("Required extension \x1b[33m%s\x1b[0m is not available", req_ext)
+		log_warnf("Required extension \x1b[33m%s\x1b[0m is not available", req_ext)
 		supported = false
 	}
 
@@ -51,7 +50,7 @@ check_features_10 :: proc(requested, supported: vk.PhysicalDeviceFeatures) -> bo
 				supported_value := (^b32)(uintptr(&supported) + offset)^
 
 				if requested_value && !supported_value {
-					log.warnf("Feature \x1b[33m%s\x1b[0m requested but not supported", name)
+					log_warnf("Feature \x1b[33m%s\x1b[0m requested but not supported", name)
 					return false
 				}
 			}

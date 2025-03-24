@@ -1,7 +1,6 @@
 package vk_bootstrap
 
 // Core
-import "core:log"
 import "core:mem"
 
 // Vendor
@@ -60,25 +59,25 @@ physical_device_get_queue_index :: proc(
 	case .Present:
 		index = get_present_queue_index(self.queue_families, self.handle, self.surface)
 		if index == vk.QUEUE_FAMILY_IGNORED {
-			log.error("Present queue index unavailable.")
+			log_error("Present queue index unavailable.")
 			return
 		}
 	case .Graphics:
 		index = get_first_queue_index(self.queue_families, {.GRAPHICS})
 		if index == vk.QUEUE_FAMILY_IGNORED {
-			log.error("Graphics queue index unavailable.")
+			log_error("Graphics queue index unavailable.")
 			return
 		}
 	case .Compute:
 		index = get_separate_queue_index(self.queue_families, {.COMPUTE}, {.TRANSFER})
 		if index == vk.QUEUE_FAMILY_IGNORED {
-			log.error("Compute queue index unavailable.")
+			log_error("Compute queue index unavailable.")
 			return
 		}
 	case .Transfer:
 		index = get_separate_queue_index(self.queue_families, {.TRANSFER}, {.COMPUTE})
 		if index == vk.QUEUE_FAMILY_IGNORED {
-			log.error("Transfer queue index unavailable.")
+			log_error("Transfer queue index unavailable.")
 			return
 		}
 	}
@@ -178,7 +177,7 @@ physical_device_enable_extension_if_present :: proc(
 		}
 	}
 
-	log.warnf("The extension \x1b[33m%s\x1b[0m is not available", extension)
+	log_warnf("The extension \x1b[33m%s\x1b[0m is not available", extension)
 
 	return false
 }
@@ -197,7 +196,7 @@ physical_device_enable_extensions_if_present :: proc(
 	for &available in &self.available_extensions {
 		for ext in extensions {
 			if cstring(&available.extensionName[0]) != ext {
-				log.warnf("The extension \x1b[33m%s\x1b[0m is not available", ext)
+				log_warnf("The extension \x1b[33m%s\x1b[0m is not available", ext)
 				all_ext_present = false
 			}
 		}

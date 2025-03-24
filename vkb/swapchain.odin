@@ -2,7 +2,6 @@ package vk_bootstrap
 
 // Core
 import "base:runtime"
-import "core:log"
 import "core:mem"
 
 // Vendor
@@ -59,12 +58,12 @@ swapchain_get_images :: proc(
 	image_count: u32 = 0
 	if res := vk.GetSwapchainImagesKHR(self.device.handle, self.handle, &image_count, nil);
 	   res != .SUCCESS {
-		log.errorf("Failed to get swapchain images count: \x1b[31m%v\x1b[0m", res)
+		log_errorf("Failed to get swapchain images count: \x1b[31m%v\x1b[0m", res)
 		return
 	}
 
 	if image_count == 0 {
-		log.errorf("No swapchain images available!")
+		log_errorf("No swapchain images available!")
 		return
 	}
 
@@ -86,7 +85,7 @@ swapchain_get_images :: proc(
 		&image_count,
 		raw_data(images),
 	); res != .SUCCESS {
-		log.errorf("Failed to get swapchain images: \x1b[31m%v\x1b[0m", res)
+		log_errorf("Failed to get swapchain images: \x1b[31m%v\x1b[0m", res)
 		return
 	}
 
@@ -166,7 +165,7 @@ swapchain_get_image_views :: proc(
 			self.allocation_callbacks,
 			&views[i],
 		); res != .SUCCESS {
-			log.fatalf("Failed to create swapchain image view: \x1b[31m%v\x1b[0m ", res)
+			log_fatalf("Failed to create swapchain image view: \x1b[31m%v\x1b[0m ", res)
 			return
 		}
 	}
@@ -177,7 +176,7 @@ swapchain_get_image_views :: proc(
 swapchain_destroy_image_views :: proc(self: ^Swapchain, views: []vk.ImageView) {
 	for view, index in views {
 		if view == 0 {
-			log.warnf(
+			log_warnf(
 				"Trying to destroy an invalid image view at \x1b[33m%d\x1b[0m, ignoring...",
 				index,
 			)

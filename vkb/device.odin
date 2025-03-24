@@ -1,7 +1,6 @@
 package vk_bootstrap
 
 // Core
-import "core:log"
 import "core:mem"
 
 // Vendor
@@ -51,25 +50,25 @@ device_get_queue_index :: proc(
 			self.surface,
 		)
 		if index == vk.QUEUE_FAMILY_IGNORED {
-			log.error("Present queue index unavailable.")
+			log_error("Present queue index unavailable.")
 			return
 		}
 	case .Graphics:
 		index = get_first_queue_index(self.queue_families, {.GRAPHICS})
 		if index == vk.QUEUE_FAMILY_IGNORED {
-			log.error("Graphics queue index unavailable.")
+			log_error("Graphics queue index unavailable.")
 			return
 		}
 	case .Compute:
 		index = get_separate_queue_index(self.queue_families, {.COMPUTE}, {.TRANSFER})
 		if index == vk.QUEUE_FAMILY_IGNORED {
-			log.error("Compute queue index unavailable.")
+			log_error("Compute queue index unavailable.")
 			return
 		}
 	case .Transfer:
 		index = get_separate_queue_index(self.queue_families, {.TRANSFER}, {.COMPUTE})
 		if index == vk.QUEUE_FAMILY_IGNORED {
-			log.error("Transfer queue index unavailable.")
+			log_error("Transfer queue index unavailable.")
 			return
 		}
 	}
@@ -90,17 +89,17 @@ device_get_dedicated_queue_index :: proc(
 	case .Compute:
 		index = get_dedicated_queue_index(self.queue_families, {.COMPUTE}, {.TRANSFER})
 		if index == vk.QUEUE_FAMILY_IGNORED {
-			log.error("Dedicated Compute queue index unavailable.")
+			log_error("Dedicated Compute queue index unavailable.")
 			return
 		}
 	case .Transfer:
 		index = get_dedicated_queue_index(self.queue_families, {.TRANSFER}, {.COMPUTE})
 		if index == vk.QUEUE_FAMILY_IGNORED {
-			log.error("Dedicated Transfer queue index unavailable.")
+			log_error("Dedicated Transfer queue index unavailable.")
 			return
 		}
 	case:
-		log.error("Invalid queue family index.")
+		log_error("Invalid queue family index.")
 		return
 	}
 
