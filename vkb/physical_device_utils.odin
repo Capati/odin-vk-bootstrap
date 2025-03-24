@@ -14,8 +14,13 @@ check_device_extension_support :: proc(
 ) {
 	supported = true
 
-	if len(required_extensions) == 0 || len(available_extensions) == 0 {
+	if len(required_extensions) == 0 {
 		return true
+	}
+
+	if len(available_extensions) == 0 && len(required_extensions) > 0 {
+		log_warn("No available extensions to check against required extensions")
+		return false
 	}
 
 	required_loop: for req_ext in required_extensions {
