@@ -36,12 +36,6 @@ Swapchain_Builder :: struct {
 	allocator:                mem.Allocator,
 }
 
-Buffer_Mode :: enum u32 {
-	Single_Buffering = 1,
-	Double_Buffering = 2,
-	Triple_Buffering = 3,
-}
-
 DEFAULT_SWAPCHAIN_BUILDER :: Swapchain_Builder {
 	instance_version  = vk.API_VERSION_1_0,
 	create_flags      = {},
@@ -62,7 +56,7 @@ init_swapchain_builder_base :: proc(builder: ^Swapchain_Builder) {
 	builder.desired_present_modes.allocator = builder.allocator
 }
 
-/* Construct a `Swapchain_Builder` with a `vkb.Device`. */
+// Creates a `Swapchain_Builder` with a `vkb.Device`.
 init_swapchain_builder_default :: proc(
 	device: ^Device,
 ) -> (
@@ -84,6 +78,7 @@ init_swapchain_builder_default :: proc(
 	return builder, true
 }
 
+// Creates a `Swapchain_Builder` with a specific `vkb.Device` and `vk.SurfaceKHR`.
 init_swapchain_builder_surface :: proc(
 	device: ^Device,
 	surface: vk.SurfaceKHR,
@@ -109,12 +104,16 @@ init_swapchain_builder_surface :: proc(
 	return builder, true
 }
 
+// Creates a `Swapchain_Builder` with a specific `vkb.Device`, `vk.SurfaceKHR`, and optionally
+// can provide the indices for the graphics and present queue.
+//
+// Note: The procedure will query the graphics & present queue if the indices are not provided.
 init_swapchain_builder_handles :: proc(
 	physical_device: ^Physical_Device,
 	device: ^Device,
 	surface: vk.SurfaceKHR,
-	graphics_queue_index: u32 = vk.QUEUE_FAMILY_IGNORED,
-	present_queue_index: u32 = vk.QUEUE_FAMILY_IGNORED,
+	#any_int graphics_queue_index: u32 = vk.QUEUE_FAMILY_IGNORED,
+	#any_int present_queue_index: u32 = vk.QUEUE_FAMILY_IGNORED,
 ) -> (
 	builder: Swapchain_Builder,
 	ok: bool,
@@ -180,14 +179,13 @@ init_swapchain_builder_handles :: proc(
 	return builder, true
 }
 
-/*
-Construct a `Swapchain_Builder`:
-- with a `vkb.Device`.
-- with a specific `VkSurfaceKHR` and `vkb.Device`.
-- with Vulkan handles for the physical device, device and surface and optionally can provide the
-  `u32` indices for the graphics and present queue. Note: The constructor will query the graphics &
-  present queue if the indices are not provided.
-*/
+
+// Creates a `Swapchain_Builder`:
+// - with a `vkb.Device`.
+// - with a specific `VkSurfaceKHR` and `vkb.Device`.
+// - with Vulkan handles for the physical device, device and surface and optionally can provide
+//   the `u32` indices for the graphics and present queue. Note: The procedure will query the
+//   graphics & present queue if the indices are not provided.
 init_swapchain_builder :: proc {
 	init_swapchain_builder_default,
 	init_swapchain_builder_surface,
@@ -201,7 +199,7 @@ destroy_swapchain_builder :: proc(self: ^Swapchain_Builder) {
 	delete(self.desired_present_modes)
 }
 
-/* Create a `Swapchain`. Return an error if it failed. */
+// Create a `Swapchain`. Return an error if it failed.
 @(require_results)
 build_swapchain :: proc(
 	self: ^Swapchain_Builder,
@@ -265,8 +263,8 @@ build_swapchain :: proc(
 
 		image_count = self.required_min_image_count
 	} else if self.min_image_count == 0 {
-		// We intentionally use `minImageCount` + 1 to maintain existing behavior, even
-		// if it typically results in triple buffering on most systems.
+		// We intentionally use `minImageCount` + 1 to maintain existing behavior, even if it
+		// typically results in triple buffering on most systems.
 		image_count = surface_support.capabilities.minImageCount + 1
 	} else {
 		image_count = self.min_image_count
@@ -447,26 +445,23 @@ swapchain_builder_set_old_swapchain_vkb :: proc(
 	}
 }
 
-/*
-Set the `old_swapchain` field of `vk.SwapchainCreateInfoKHR`.
-
-For use in rebuilding a swapchain.
- */
+// Set the `oldSwapchain` field of `vk.SwapchainCreateInfoKHR`.
+//
+// For use in rebuilding a swapchain.
 swapchain_builder_set_old_swapchain :: proc {
 	swapchain_builder_set_old_swapchain_vulkan,
 	swapchain_builder_set_old_swapchain_vkb,
 }
 
-/*
-Desired size of the swapchain. By default, the swapchain will use the size
-of the window being drawn to.
- */
+// Desired size of the swapchain.
+//
+// By default, the swapchain will use the size of the window being drawn to.
 swapchain_builder_set_desired_extent :: proc(self: ^Swapchain_Builder, width, height: u32) {
 	self.desired_width = width
 	self.desired_height = height
 }
 
-/* When determining the surface format, make this the first to be used if supported. */
+// When determining the surface format, make this the first to be used if supported.
 swapchain_builder_set_desired_format :: proc(
 	self: ^Swapchain_Builder,
 	format: vk.SurfaceFormatKHR,
@@ -474,7 +469,7 @@ swapchain_builder_set_desired_format :: proc(
 	inject_at(&self.desired_formats, 0, format)
 }
 
-/* Add this swapchain format to the end of the list of formats selected from. */
+// Add this swapchain format to the end of the list of formats selected from.
 swapchain_builder_add_fallback_format :: proc(
 	self: ^Swapchain_Builder,
 	format: vk.SurfaceFormatKHR,
@@ -482,11 +477,10 @@ swapchain_builder_add_fallback_format :: proc(
 	append(&self.desired_formats, format)
 }
 
-/*
-Use the default swapchain formats. This is done if no formats are provided.
 
-Default surface format is {`vk.FORMAT_B8G8R8A8_SRGB`, `vk.COLOR_SPACE_SRGB_NONLINEAR_KHR`}
- */
+// Use the default swapchain formats. This is done if no formats are provided.
+
+// Default surface format is {`vk.FORMAT_B8G8R8A8_SRGB`, `vk.COLOR_SPACE_SRGB_NONLINEAR_KHR`}
 swapchain_builder_use_default_format_selection :: proc(self: ^Swapchain_Builder) {
 	clear(&self.desired_formats)
 	swapchain_builder_utils_add_desired_formats(&self.desired_formats)
@@ -500,22 +494,20 @@ swapchain_builder_set_present_mode :: proc(
 	append(&self.desired_present_modes, present_mode)
 }
 
-/*
-Use the default presentation mode. This is done if no present modes are provided.
 
-Default present modes: `MAILBOX` with fallback `FIFO`.
- */
+// Use the default presentation mode. This is done if no present modes are provided.
+//
+// Default present modes: `MAILBOX` with fallback `FIFO`.
 swapchain_builder_use_default_present_mode_selection :: proc(self: ^Swapchain_Builder) {
 	clear(&self.desired_present_modes)
 	swapchain_builder_utils_add_desired_present_modes(&self.desired_present_modes)
 }
 
-/*
-Set the bitmask of the image usage for acquired swapchain images.
 
-If the surface capabilities cannot allow it, building the swapchain will result in the
-`Required_Usage_Not_Supported` error.
- */
+// Set the bitmask of the image usage for acquired swapchain images.
+//
+// If the surface capabilities cannot allow it, building the swapchain will result in the
+// `Required_Usage_Not_Supported` error.
 swapchain_builder_set_image_usage_flags :: proc(
 	self: ^Swapchain_Builder,
 	usage_flags: vk.ImageUsageFlags,
@@ -523,7 +515,7 @@ swapchain_builder_set_image_usage_flags :: proc(
 	self.image_usage_flags = usage_flags
 }
 
-/* Add a image usage to the bitmask for acquired swapchain images. */
+// Add a image usage to the bitmask for acquired swapchain images.
 swapchain_builder_add_image_usage_flags :: proc(
 	self: ^Swapchain_Builder,
 	usage_flags: vk.ImageUsageFlags,
@@ -531,15 +523,14 @@ swapchain_builder_add_image_usage_flags :: proc(
 	self.image_usage_flags += usage_flags
 }
 
-/*
-Use the default image usage bitmask values. This is the default if no image usages
-are provided. The default is `{.COLOR_ATTACHMENT}`
- */
+// Use the default image usage bitmask values.
+//
+// This is the default if no image usages are provided. The default is `{.COLOR_ATTACHMENT}`
 swapchain_builder_use_default_image_usage_flags :: proc(self: ^Swapchain_Builder) {
 	self.image_usage_flags = {.COLOR_ATTACHMENT}
 }
 
-/* Set the number of views in for multiview/stereo surface */
+// Set the number of views in for multiview/stereo surface
 swapchain_builder_set_image_array_layer_count :: proc(
 	self: ^Swapchain_Builder,
 	array_layer_count: u32,
@@ -554,6 +545,12 @@ swapchain_builder_set_desired_min_image_count_value :: proc(
 	self.min_image_count = min_image_count
 }
 
+Buffer_Mode :: enum u32 {
+	Single_Buffering = 1,
+	Double_Buffering = 2,
+	Triple_Buffering = 3,
+}
+
 swapchain_builder_set_desired_min_image_count_buffer_mode :: proc(
 	self: ^Swapchain_Builder,
 	buffer_mode: Buffer_Mode,
@@ -561,25 +558,25 @@ swapchain_builder_set_desired_min_image_count_buffer_mode :: proc(
 	self.min_image_count = transmute(u32)buffer_mode
 }
 
-/* Sets the desired minimum image count for the swapchain. */
+// Sets the desired minimum image count for the swapchain.
 swapchain_builder_set_desired_min_image_count :: proc {
 	swapchain_builder_set_desired_min_image_count_value,
 	swapchain_builder_set_desired_min_image_count_buffer_mode,
 }
 
-/*
-Set whether the Vulkan implementation is allowed to discard rendering operations that
-affect regions of the surface that are not visible. Default is true.
 
-Note: Applications should use the default of true if they do not expect to read back the content
-of presentable images before presenting them or after reacquiring them, and if their fragment
-shaders do not have any side effects that require them to run for all pixels in the presentable image.
-*/
+// Set whether the Vulkan implementation is allowed to discard rendering operations that affect
+// regions of the surface that are not visible. Default is `true`.
+//
+// Note: Applications should use the default of `true` if they do not expect to read back the
+// content of presentable images before presenting them or after reacquiring them, and if their
+// fragment shaders do not have any side effects that require them to run for all pixels in the
+// presentable image.
 swapchain_builder_set_clipped :: proc(self: ^Swapchain_Builder, clipped: bool = true) {
 	self.clipped = clipped
 }
 
-/* Set the `vk.SwapchainCreateFlagsKHR`. */
+// Set the `vk.SwapchainCreateFlagsKHR`.
 swapchain_builder_set_create_flags :: proc(
 	self: ^Swapchain_Builder,
 	create_flags: vk.SwapchainCreateFlagsKHR,
@@ -587,7 +584,7 @@ swapchain_builder_set_create_flags :: proc(
 	self.create_flags = create_flags
 }
 
-/* Set the transform to be applied, like a 90 degree rotation. Default is no transform. */
+// Set the transform to be applied, like a 90 degree rotation. Default is no transform.
 swapchain_builder_set_pre_transform_flags :: proc(
 	self: ^Swapchain_Builder,
 	pre_transform_flags: vk.SurfaceTransformFlagsKHR,
@@ -595,16 +592,15 @@ swapchain_builder_set_pre_transform_flags :: proc(
 	self.pre_transform = pre_transform_flags
 }
 
-/*
-Add a structure to the pNext chain of `vk.SwapchainCreateInfoKHR`.
 
-The structure must be valid when `swapchain_builder_build()` is called.
-*/
+// Add a structure to the pNext chain of `vk.SwapchainCreateInfoKHR`.
+//
+// The structure must be valid when `swapchain_builder_build()` is called.
 swapchain_builder_add_p_next :: proc(self: ^Swapchain_Builder, structure: ^$T) {
 	append(&self.p_next_chain, cast(^vk.BaseOutStructure)structure)
 }
 
-/* Set the alpha channel to be used with other windows in on the system. Default is {.OPAQUE}. */
+// Set the alpha channel to be used with other windows in on the system. Default is {.OPAQUE}.
 swapchain_builder_set_composite_alpha_flags :: proc(
 	self: ^Swapchain_Builder,
 	composite_alpha_flags: vk.CompositeAlphaFlagsKHR,
@@ -612,7 +608,7 @@ swapchain_builder_set_composite_alpha_flags :: proc(
 	self.composite_alpha = composite_alpha_flags
 }
 
-/* Provide custom allocation callbacks. */
+// Provide custom allocation callbacks.
 swapchain_builder_allocation_callbacks :: proc(
 	self: ^Swapchain_Builder,
 	callbacks: ^vk.AllocationCallbacks,
