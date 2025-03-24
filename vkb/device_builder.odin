@@ -193,10 +193,10 @@ build_device :: proc(
 	device.allocator = allocator
 
 	if res := vk.CreateDevice(
-		self.physical_device.ptr,
+		self.physical_device.handle,
 		&device_create_info,
 		self.allocation_callbacks,
-		&device.ptr,
+		&device.handle,
 	); res != .SUCCESS {
 		log.fatalf("Failed to create logical device: \x1b[31m%v\x1b[0m", res)
 		return

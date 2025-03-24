@@ -137,7 +137,7 @@ init_swapchain_builder_handles :: proc(
 	   present_queue_index == vk.QUEUE_FAMILY_IGNORED {
 		// Get the device queue families
 		queue_family_count: u32
-		vk.GetPhysicalDeviceQueueFamilyProperties(physical_device.ptr, &queue_family_count, nil)
+		vk.GetPhysicalDeviceQueueFamilyProperties(physical_device.handle, &queue_family_count, nil)
 
 		if queue_family_count == 0 {
 			log.error(
@@ -157,7 +157,7 @@ init_swapchain_builder_handles :: proc(
 		}
 
 		vk.GetPhysicalDeviceQueueFamilyProperties(
-			physical_device.ptr,
+			physical_device.handle,
 			&queue_family_count,
 			raw_data(queue_families),
 		)
@@ -169,7 +169,7 @@ init_swapchain_builder_handles :: proc(
 		if present_queue_index == vk.QUEUE_FAMILY_IGNORED {
 			builder.present_queue_index = get_present_queue_index(
 				queue_families,
-				physical_device.ptr,
+				physical_device.handle,
 				surface,
 			)
 		}
@@ -246,7 +246,7 @@ build_swapchain :: proc(
 
 	// Get surface support details (capabilities, formats and present modes)
 	surface_support := swapchain_builder_utils_query_surface_support_details(
-		self.physical_device.ptr,
+		self.physical_device.handle,
 		self.surface,
 		context.temp_allocator,
 	) or_return
@@ -400,10 +400,10 @@ build_swapchain :: proc(
 	swapchain.allocator = allocator
 
 	if res := vk.CreateSwapchainKHR(
-		self.device.ptr,
+		self.device.handle,
 		&swapchain_create_info,
 		self.allocation_callbacks,
-		&swapchain.ptr,
+		&swapchain.handle,
 	); res != .SUCCESS {
 		log.fatalf("Failed to create Swapchain: \x1b[31m%v\x1b[0m", res)
 		return
@@ -440,8 +440,8 @@ swapchain_builder_set_old_swapchain_vkb :: proc(
 	self: ^Swapchain_Builder,
 	old_swapchain: ^Swapchain,
 ) {
-	if old_swapchain != nil && old_swapchain.ptr != 0 {
-		self.old_swapchain = old_swapchain.ptr
+	if old_swapchain != nil && old_swapchain.handle != 0 {
+		self.old_swapchain = old_swapchain.handle
 	} else {
 		self.old_swapchain = 0
 	}

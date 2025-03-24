@@ -7,7 +7,7 @@ import "core:mem"
 import vk "vendor:vulkan"
 
 Instance :: struct {
-	ptr:                     vk.Instance,
+	handle:                  vk.Instance,
 	debug_messenger:         vk.DebugUtilsMessengerEXT,
 	allocation_callbacks:    ^vk.AllocationCallbacks,
 	headless:                bool,
@@ -21,17 +21,17 @@ Instance :: struct {
 
 /* Destroy the surface created from this instance. */
 destroy_surface :: proc(self: ^Instance, surface: vk.SurfaceKHR, loc := #caller_location) {
-	assert(self != nil && self.ptr != nil, "Invalid Instance", loc)
+	assert(self != nil && self.handle != nil, "Invalid Instance", loc)
 	assert(surface != 0, "Invalid Surface", loc)
-	vk.DestroySurfaceKHR(self.ptr, surface, self.allocation_callbacks)
+	vk.DestroySurfaceKHR(self.handle, surface, self.allocation_callbacks)
 }
 
 /* Destroy the instance and the debug messenger. */
 destroy_instance :: proc(self: ^Instance, loc := #caller_location) {
-	assert(self != nil && self.ptr != nil, "Invalid Instance", loc)
+	assert(self != nil && self.handle != nil, "Invalid Instance", loc)
 	if self.debug_messenger != 0 {
-		vk.DestroyDebugUtilsMessengerEXT(self.ptr, self.debug_messenger, nil)
+		vk.DestroyDebugUtilsMessengerEXT(self.handle, self.debug_messenger, nil)
 	}
-	vk.DestroyInstance(self.ptr, nil)
+	vk.DestroyInstance(self.handle, nil)
 	free(self, self.allocator)
 }

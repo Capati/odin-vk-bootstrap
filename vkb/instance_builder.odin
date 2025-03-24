@@ -395,14 +395,17 @@ build_instance :: proc(
 	}
 	instance.allocator = allocator
 
-	if res := vk.CreateInstance(&instance_create_info, self.allocation_callbacks, &instance.ptr);
-	   res != .SUCCESS {
+	if res := vk.CreateInstance(
+		&instance_create_info,
+		self.allocation_callbacks,
+		&instance.handle,
+	); res != .SUCCESS {
 		log.fatalf("Failed to create instance: \x1b[31m%v\x1b[0m", res)
 		return
 	}
 
 	// Load the rest of the functions with our instance
-	vk.load_proc_addresses(instance.ptr)
+	vk.load_proc_addresses(instance.handle)
 
 	if self.use_debug_messenger {
 		debug_utils_create_info := vk.DebugUtilsMessengerCreateInfoEXT {
@@ -415,7 +418,7 @@ build_instance :: proc(
 		}
 
 		if res := vk.CreateDebugUtilsMessengerEXT(
-			instance.ptr,
+			instance.handle,
 			&debug_utils_create_info,
 			self.allocation_callbacks,
 			&instance.debug_messenger,

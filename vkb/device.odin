@@ -8,7 +8,7 @@ import "core:mem"
 import vk "vendor:vulkan"
 
 Device :: struct {
-	ptr:                  vk.Device,
+	handle:               vk.Device,
 	physical_device:      ^Physical_Device,
 	surface:              vk.SurfaceKHR,
 	queue_families:       []vk.QueueFamilyProperties,
@@ -27,10 +27,10 @@ Queue_Type :: enum {
 }
 
 destroy_device :: proc(self: ^Device, loc := #caller_location) {
-	assert(self != nil && self.ptr != nil, "Invalid Device", loc)
+	assert(self != nil && self.handle != nil, "Invalid Device", loc)
 	context.allocator = self.allocator
 	delete(self.queue_families)
-	vk.DestroyDevice(self.ptr, self.allocation_callbacks)
+	vk.DestroyDevice(self.handle, self.allocation_callbacks)
 	free(self)
 }
 
@@ -47,7 +47,7 @@ device_get_queue_index :: proc(
 	case .Present:
 		index = get_present_queue_index(
 			self.queue_families,
-			self.physical_device.ptr,
+			self.physical_device.handle,
 			self.surface,
 		)
 		if index == vk.QUEUE_FAMILY_IGNORED {
@@ -115,7 +115,7 @@ device_get_queue :: proc(
 	ok: bool,
 ) #optional_ok {
 	index := device_get_queue_index(self, type) or_return
-	vk.GetDeviceQueue(self.ptr, index, 0, &queue)
+	vk.GetDeviceQueue(self.handle, index, 0, &queue)
 	return queue, true
 }
 
@@ -127,6 +127,6 @@ device_get_dedicated_queue :: proc(
 	ok: bool,
 ) #optional_ok {
 	index := device_get_dedicated_queue_index(self, type) or_return
-	vk.GetDeviceQueue(self.ptr, index, 0, &queue)
+	vk.GetDeviceQueue(self.handle, index, 0, &queue)
 	return queue, true
 }

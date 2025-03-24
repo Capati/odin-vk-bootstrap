@@ -76,7 +76,6 @@ Selection_Criteria :: vkb.Selection_Criteria
 Preferred_Device_Type :: vkb.Preferred_Device_Type
 init_physical_device_selector :: vkb.init_physical_device_selector
 destroy_physical_device_selector :: vkb.destroy_physical_device_selector
-Device_Selection_Mode :: vkb.Device_Selection_Mode
 select_physical_device :: vkb.select_physical_device
 selector_select_impl :: vkb.selector_select_impl
 enumerate_physical_devices :: vkb.enumerate_physical_devices
