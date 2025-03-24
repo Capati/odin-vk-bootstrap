@@ -65,6 +65,7 @@ check_device_features_support :: proc(
 	supported: vk.PhysicalDeviceFeatures,
 	extension_requested: []Generic_Feature,
 	extension_supported: []Generic_Feature,
+	loc := #caller_location,
 ) -> bool {
 	check_features_10(requested, supported) or_return
 
@@ -76,7 +77,7 @@ check_device_features_support :: proc(
 
 	total := len(extension_requested)
 	for i in 0 ..< total {
-		if !generic_features_match(&extension_requested[i], &extension_supported[i]) {
+		if !generic_features_match(&extension_requested[i], &extension_supported[i], loc) {
 			return false
 		}
 	}

@@ -31,13 +31,16 @@ create_generic_features :: proc(features: ^$T) -> (v: Generic_Feature) {
 generic_features_match :: proc(
 	requested: ^Generic_Feature,
 	supported: ^Generic_Feature,
+	loc := #caller_location,
 ) -> (
 	ok: bool,
 ) {
 	assert(
 		requested.p_next.sType == supported.p_next.sType,
 		"Non-matching sTypes in features nodes!",
+		loc,
 	)
+	assert(requested.type == supported.type, "Non-matching extension types!", loc)
 
 	ok = true
 
