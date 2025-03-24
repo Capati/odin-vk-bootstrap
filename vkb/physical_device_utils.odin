@@ -36,7 +36,7 @@ check_device_extension_support :: proc(
 	return
 }
 
-/* Check features 1.0. */
+// Check features 1.0.
 check_features_10 :: proc(requested, supported: vk.PhysicalDeviceFeatures) -> bool {
 	supported := supported
 	requested := requested
