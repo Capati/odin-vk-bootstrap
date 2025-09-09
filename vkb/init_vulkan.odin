@@ -1,5 +1,4 @@
 #+vet !unused-imports
-#+feature global-context
 package vk_bootstrap
 
 // Core
@@ -14,7 +13,9 @@ import vk "vendor:vulkan"
 g_module: dynlib.Library = nil
 
 @(init, private = "file")
-init :: proc() {
+init :: proc "contextless" () {
+	context = runtime.default_context()
+
 	loaded: bool
 
 	// Load Vulkan library by platform
@@ -67,6 +68,7 @@ init :: proc() {
 }
 
 @(fini, private = "file")
-deinit :: proc() {
+deinit :: proc "contextless" () {
+	context = runtime.default_context()
 	dynlib.unload_library(g_module)
 }
