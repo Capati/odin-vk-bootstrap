@@ -1,4 +1,5 @@
 #+vet !unused-imports
+#+feature global-context
 package vk_bootstrap
 
 // Core
