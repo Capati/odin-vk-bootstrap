@@ -7,6 +7,7 @@
 - Use full procedure names  
   (`instance_set_surface` → `instance_builder_set_surface`)
 - Improved tests using a mocked Vulkan API
+- Can use current `vk.ProcGetInstanceProcAddr`
 - Examples: replaced `SDL2` with `GLFW`
 - Examples: added new examples:
     - `system_info`
