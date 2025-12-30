@@ -8,7 +8,7 @@ Read the [Getting Started](./docs/getting_started.md) guide for a quick start on
 
 ## Basic Usage
 
-Copy the `vkb` folder to your project or to `shared` directory.
+Just copy the `vkbootstrap.odin` file to your project.
 
 ```odin
 import "core:fmt"
