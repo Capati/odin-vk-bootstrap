@@ -2673,13 +2673,52 @@ create_swapchain_builder_surface :: proc(
 }
 
 create_swapchain_builder_queue_index :: proc(
+	physical_device: ^Physical_Device,
 	device: ^Device,
 	surface: vk.SurfaceKHR,
 	graphics_queue_index: u32,
 	present_queue_index: u32,
 	allocator := context.allocator,
-) -> ^Swapchain_Builder {
-	return nil
+) -> (
+	builder: ^Swapchain_Builder,
+) {
+	builder = swapchain_builder_default_impl(device, allocator)
+	builder.surface = surface
+
+	if graphics_queue_index == vk.QUEUE_FAMILY_IGNORED ||
+	   present_queue_index == vk.QUEUE_FAMILY_IGNORED {
+		ta := context.temp_allocator
+		runtime.DEFAULT_TEMP_ALLOCATOR_TEMP_GUARD(ignore = allocator == ta)
+
+		// Get the device queue families
+		queue_family_count: u32
+		vk.GetPhysicalDeviceQueueFamilyProperties(
+			physical_device.physical_device, &queue_family_count, nil)
+		if queue_family_count == 0 {
+			return
+		}
+
+		queue_families := make([]vk.QueueFamilyProperties, int(queue_family_count), ta)
+		vk.GetPhysicalDeviceQueueFamilyProperties(
+			physical_device.physical_device,
+			&queue_family_count,
+			raw_data(queue_families),
+		)
+
+		if graphics_queue_index == vk.QUEUE_FAMILY_IGNORED {
+			builder.graphics_queue_index = get_first_queue_index(queue_families, {.GRAPHICS})
+		}
+
+		if present_queue_index == vk.QUEUE_FAMILY_IGNORED {
+			builder.present_queue_index = get_present_queue_index(
+				physical_device.physical_device,
+				surface,
+				queue_families,
+			)
+		}
+	}
+
+	return builder
 }
 
 create_swapchain_builder :: proc {
