@@ -16,4 +16,4 @@
 - Added `physical_device_find_queue_family_index`
 - Renamed `convert_vulkan_to_vma_version` → `VK_API_VERSION_TO_DECIMAL`
 - All code is now in `vkbootstrap.odin` at the project root
-- Keep previous code at `vkb-old``for reference
+- Keep previous code at `vkb-old` for reference
