@@ -11,74 +11,67 @@ Read the [Getting Started](./docs/getting_started.md) guide for a quick start on
 Copy the `vkb` folder to your project or to `shared` directory.
 
 ```odin
+import "core:fmt"
 import "vkb"
 import vk "vendor:vulkan"
 
 main :: proc() {
-    // Start by creating a new instance builder
-    instance_builder, instance_builder_ok := vkb.init_instance_builder()
-    if !instance_builder_ok {
-        return
-    }
-    defer vkb.destroy_instance_builder(&instance_builder)
+    builder := vkb.create_instance_builder()
+    defer vkb.destroy_instance_builder(builder)
 
     // Require the minimum Vulkan api version 1.1
-    vkb.instance_set_minimum_version(&instance_builder, vk.API_VERSION_1_1)
+    vkb.instance_builder_require_api_version(&instance_builder, vk.API_VERSION_1_1)
 
     when ODIN_DEBUG {
         // Enable `VK_LAYER_KHRONOS_validation` layer
-        vkb.instance_request_validation_layers(&instance_builder)
+        vkb.instance_builder_enable_validation_layers(&instance_builder)
 
         // Enable debug reporting with a default messenger callback
-        vkb.instance_use_default_debug_messenger(&instance_builder)
+        vkb.instance_builder_use_default_debug_messenger(&instance_builder)
     }
 
-    instance, instance_ok := vkb.build_instance(&instance_builder)
-    if !instance_ok {
+    vkb_instance, vkb_instance_err := vkb.instance_builder_build(instance_builder)
+    if vkb_instance_err != nil {
+        fmt.eprintfln("Failed to build instance: %#v", vkb_instance_err)
         return
     }
-    defer vkb.destroy_instance(instance)
+    defer vkb.destroy_instance(vkb_instance)
 
     // Create a new physical device selector
-    selector, selector_ok := vkb.init_physical_device_selector(instance)
-    if !selector_ok {
-        return
-    }
-    defer vkb.destroy_selection_criteria(&selector)
+    selector := vkb.create_physical_device_selector(vkb_instance)
+    defer vkb.destroy_physical_device_selector(selector)
 
     // We want a GPU that can render to current Window surface
-    vkb.selector_set_surface(&selector, /* from user created window*/)
+    vkb.physical_device_selector_set_surface(&selector, /* from user created window*/)
 
     // Require a vulkan 1.1 capable device
-    vkb.selector_set_minimum_version(&selector, vk.API_VERSION_1_1)
+    vkb.physical_device_selector_set_minimum_version(&selector, vk.API_VERSION_1_1)
 
     // Try to select a suitable device
-    physical_device, physical_device_ok := vkb.select_physical_device(&selector)
-    if !physical_device_ok {
+    vkb_physical_device, vkb_physical_device_err := vkb.physical_device_selector_select(selector)
+    if vkb_physical_device_err != nil {
+        fmt.eprintfln("Failed to select physical device: %#v", vkb_physical_device_err)
         return
     }
-
     // In Vulkan you don't need to destroy a physical device, but here you need
     // to free some resources when the physical device was created.
-    defer vkb.destroy_physical_device(physical_device)
+    defer vkb.destroy_physical_device(vkb_physical_device)
 
     // Create a device builder
-    device_builder, device_builder_ok := vkb.init_device_builder(physical_device)
-    if !device_builder_ok {
-        return
-    }
-    defer vkb.destroy_device_builder(&device_builder)
+    device_builder := vkb.create_device_builder(vkb_physical_device)
+    defer vkb.destroy_device_builder(device_builder)
 
     // Automatically propagate needed data from instance & physical device
-    device, device_ok := vkb.build_device(&device_builder)
-    if !device_ok {
+    vkb_device, vkb_device_err := vkb.device_builder_build(device_builder)
+    if vkb_device_err != nil {
+        fmt.eprintfln("Failed to get logical device: %#v", vkb_device_err)
         return
     }
-    defer vkb.destroy_device(device)
 
     // Get the graphics queue with a helper function
-    graphics_queue, graphics_queue_ok := vkb.device_get_queue(device, .Graphics)
-    if !graphics_queue_ok {
+    graphics_queue, graphics_queue_err := vkb.device_get_queue(vkb_device, .Graphics)
+    if graphics_queue_err != nil {
+        fmt.eprintfln("Failed to get graphics queue: %#v", graphics_queue_err)
         return
     }
 }
