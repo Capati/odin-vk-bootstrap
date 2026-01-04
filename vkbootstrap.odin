@@ -8,6 +8,9 @@ import "core:mem"
 import "core:slice"
 import "core:strings"
 import "core:sync"
+import os "core:os/os2"
+
+_ :: os
 
 // Vendor
 import vk "vendor:vulkan"
@@ -3898,80 +3901,72 @@ g_vklib: Vulkan_Library
 
 @(require_results)
 load_library :: proc(
-	fp_get_instance_proc_addr: vk.ProcGetInstanceProcAddr = nil,
-	loc := #caller_location,
+    fp_get_instance_proc_addr: vk.ProcGetInstanceProcAddr = nil,
+    loc := #caller_location,
 ) -> (
-	ok: bool,
+    ok: bool,
 ) {
-	sync.guard(&g_vklib.init_mutex)
+    sync.guard(&g_vklib.init_mutex)
 
-	// Can immediately return if it has already been loaded
-	if g_vklib.loaded {
-		return true
-	}
+    // Can immediately return if it has already been loaded
+    if g_vklib.loaded {
+        return true
+    }
 
-	if fp_get_instance_proc_addr != nil {
-		g_vklib.get_instance_proc_addr = fp_get_instance_proc_addr
-	} else {
-		module: dynlib.Library
-		loaded: bool
+    if fp_get_instance_proc_addr != nil {
+        g_vklib.get_instance_proc_addr = fp_get_instance_proc_addr
+    } else {
+        library: dynlib.Library
+        did_load: bool
 
-		when ODIN_OS == .Windows {
-			module, loaded = dynlib.load_library("vulkan-1.dll")
-		} else when ODIN_OS == .Darwin {
-			module, loaded = dynlib.load_library("libvulkan.dylib", true)
+        when ODIN_OS == .Windows {
+            library, did_load = dynlib.load_library("vulkan-1.dll")
+        } else when ODIN_OS == .Darwin {
+            library, did_load = dynlib.load_library("libvulkan.dylib")
 
-			if !loaded {
-				module, loaded = dynlib.load_library("libvulkan.1.dylib", true)
-			}
+            if !did_load { library, did_load = dynlib.load_library("libvulkan.1.dylib") }
 
-			if !loaded {
-				module, loaded = dynlib.load_library("libMoltenVK.dylib", true)
-			}
+            // modern versions of macOS don't search /usr/local/lib automatically contrary to
+            // what man dlopen says Vulkan SDK uses this as the system-wide installation
+            // location, so we're going to fallback to this if all else fails
+            if !did_load {
+                ta := context.temp_allocator
+                runtime.DEFAULT_TEMP_ALLOCATOR_TEMP_GUARD()
+                _, found_lib_path := os.lookup_env("DYLD_FALLBACK_LIBRARY_PATH", ta)
+                if !found_lib_path {
+                    library, did_load = dynlib.load_library("/usr/local/lib/libvulkan.dylib")
+                }
+            }
 
-			// Add support for using Vulkan and MoltenVK in a Framework. App store rules for iOS
-			// strictly enforce no .dylib's. If they aren't found it just falls through
-			if !loaded {
-				module, loaded = dynlib.load_library("vulkan.framework/vulkan", true)
-			}
+            if !did_load { library, did_load = dynlib.load_library("libMoltenVK.dylib") }
 
-			if !loaded {
-				module, loaded = dynlib.load_library("MoltenVK.framework/MoltenVK", true)
-				ta := context.temp_allocator
-				runtime.DEFAULT_TEMP_ALLOCATOR_TEMP_GUARD()
-				_, found_lib_path := os.lookup_env("DYLD_FALLBACK_LIBRARY_PATH", ta)
-				// modern versions of macOS don't search /usr/local/lib automatically contrary to
-				// what man dlopen says Vulkan SDK uses this as the system-wide installation
-				// location, so we're going to fallback to this if all else fails
-				if !loaded && !found_lib_path {
-					module, loaded = dynlib.load_library("/usr/local/lib/libvulkan.dylib", true)
-				}
-			}
-		} else {
-			module, loaded = dynlib.load_library("libvulkan.so.1", true)
-			if !loaded {
-				module, loaded = dynlib.load_library("libvulkan.so", true)
-			}
-		}
+            // Add support for using Vulkan and MoltenVK in a Framework. App
+            // store rules for iOS strictly enforce no .dylib's. If they aren't
+            // found it just falls through
+            if !did_load { library, did_load = dynlib.load_library("vulkan.framework/vulkan") }
+            if !did_load { library, did_load = dynlib.load_library("MoltenVK.framework/MoltenVK") }
+        } else {
+            library, did_load = dynlib.load_library("libvulkan.so.1")
+            if !did_load { library, did_load = dynlib.load_library("libvulkan.so") }
+        }
 
-		if !loaded || module == nil {
-			return
-		}
+        if !did_load || library == nil {
+            return
+        }
 
-		g_vklib.module = module
-		if fp, found := dynlib.symbol_address(module, "vkGetInstanceProcAddr"); found {
-			g_vklib.get_instance_proc_addr = auto_cast fp
-		} else {
-			return
-		}
-	}
+        g_vklib.module = library
+        if fp, found := dynlib.symbol_address(library, "vkGetInstanceProcAddr"); found {
+            g_vklib.get_instance_proc_addr = auto_cast fp
+        } else {
+            return
+        }
+    }
 
-	// Load the base vulkan procedures before we can start using them
-	vk.load_proc_addresses_global(auto_cast g_vklib.get_instance_proc_addr)
+    // Load the base Vulkan procedures before we can start using them
+    vk.load_proc_addresses_global(auto_cast g_vklib.get_instance_proc_addr)
+    g_vklib.loaded = true
 
-	g_vklib.loaded = true
-
-	return true
+    return true
 }
 
 @(fini)
