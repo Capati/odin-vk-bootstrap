@@ -1,7 +1,7 @@
 {
 	"folders": [
 		{
-			"path": "."
+			"path": ".",
 		}
 	],
 	"build_systems": [
@@ -13,14 +13,14 @@
 				{
 					"name": "System Info",
 					"windows": {
-						"cmd": [ "cmd", "/c", "build-win.bat", "system_info", "run" ]
+						"cmd": [ "cmd", "/c", "build-win.bat", "system_info", "run"],
 					},
 					"linux": {
-						"cmd": [ "./build-unix.sh", "system_info", "run" ]
+						"cmd": [ "./build-unix.sh", "system_info", "run"],
 					},
 					"osx": {
-						"cmd": [ "./build-unix.sh", "system_info", "run" ]
-					}
+						"cmd": [ "./build-unix.sh", "system_info", "run"],
+					},
 				},
 				{
 					"name": "Custom Debug Callbacks",
@@ -31,44 +31,44 @@
 							"build-win.bat",
 							"custom_debug_callback",
 							"run"
-						]
+						],
 					},
 					"linux": {
 						"cmd": [
 							"./build-unix.sh",
 							"custom_debug_callback",
 							"run"
-						]
+						],
 					},
 					"osx": {
 						"cmd": [
 							"./build-unix.sh",
 							"custom_debug_callback",
 							"run"
-						]
-					}
+						],
+					},
 				},
 				{
 					"name": "Triangle",
 					"windows": {
-						"cmd": [ "cmd", "/c", "build-win.bat", "triangle", "run" ]
+						"cmd": [ "cmd", "/c", "build-win.bat", "triangle", "run"],
 					},
 					"linux": {
-						"cmd": [ "./build-unix.sh", "triangle", "run" ]
+						"cmd": [ "./build-unix.sh", "triangle", "run"],
 					},
 					"osx": {
-						"cmd": [ "./build-unix.sh", "triangle", "run" ]
-					}
+						"cmd": [ "./build-unix.sh", "triangle", "run"],
+					},
 				},
-			]
+			],
 		}
 	],
 	"settings": {
 		"auto_complete": false,
 		"LSP": {
 			"odin": {
-				"enabled": true
-			}
-		}
-	}
+				"enabled": true,
+			},
+		},
+	},
 }
