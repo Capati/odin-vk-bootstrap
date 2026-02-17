@@ -1826,7 +1826,7 @@ physical_device_selector_is_device_suitable :: proc(
 
 	present_queue :=
 		get_present_queue_index(
-			pd.physical_device, self.instance.surface, pd.queue_families) != vk.QUEUE_FAMILY_IGNORED
+			pd.queue_families, pd.physical_device, self.instance.surface) != vk.QUEUE_FAMILY_IGNORED
 
 	if self.criteria.require_dedicated_compute_queue && !dedicated_compute {
 		append(&self.unsuitability_reasons, "No dedicated compute queue")
@@ -2519,7 +2519,7 @@ device_get_queue_index :: proc(device: ^Device, type: Queue_Type) -> (index: u32
 	switch type {
 	case .Present:
 		index = get_present_queue_index(
-			device.physical_device.physical_device, device.surface, device.queue_families)
+			device.queue_families, device.physical_device.physical_device, device.surface)
 		if index == vk.QUEUE_FAMILY_IGNORED {
 			err = Queue_Error {
 				.Present_Unavailable, .ERROR_INITIALIZATION_FAILED, "Present unavailable",
@@ -2714,9 +2714,9 @@ create_swapchain_builder_queue_index :: proc(
 
 		if present_queue_index == vk.QUEUE_FAMILY_IGNORED {
 			builder.present_queue_index = get_present_queue_index(
+				queue_families,
 				physical_device.physical_device,
 				surface,
-				queue_families,
 			)
 		}
 	}
@@ -3649,26 +3649,24 @@ get_dedicated_queue_index :: proc(
 //
 // Returns `vk.QUEUE_FAMILY_IGNORED` if none is found.
 get_present_queue_index :: proc(
+	families: []vk.QueueFamilyProperties,
 	vk_physical_device: vk.PhysicalDevice,
 	surface: vk.SurfaceKHR,
-	families: []vk.QueueFamilyProperties,
 ) -> u32 {
+	if surface == 0 { return vk.QUEUE_FAMILY_IGNORED }
 	for _, queue_index in families {
 		present_support: b32
+		if vk.GetPhysicalDeviceSurfaceSupportKHR(
+			   vk_physical_device,
+			   cast(u32)queue_index,
+			   surface,
+			   &present_support,
+		   ) != .SUCCESS {
+			return vk.QUEUE_FAMILY_IGNORED
+		}
 
-		if surface != 0 {
-			if vk.GetPhysicalDeviceSurfaceSupportKHR(
-				   vk_physical_device,
-				   cast(u32)queue_index,
-				   surface,
-				   &present_support,
-			   ) != .SUCCESS {
-				return vk.QUEUE_FAMILY_IGNORED
-			}
-
-			if present_support {
-				return cast(u32)queue_index
-			}
+		if present_support {
+			return cast(u32)queue_index
 		}
 	}
 
