@@ -5,10 +5,10 @@ import "base:runtime"
 import "core:dynlib"
 import "core:fmt"
 import "core:mem"
+import "core:os"
 import "core:slice"
 import "core:strings"
 import "core:sync"
-import os "core:os/os2"
 
 _ :: os
 
