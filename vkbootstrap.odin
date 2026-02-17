@@ -2509,7 +2509,7 @@ Device :: struct {
 destroy_device :: proc(self: ^Device, loc := #caller_location) {
 	assert(self != nil, "Invalid Device", loc)
 	context.allocator = self.allocator
-	vk.DestroyDevice(self.device, nil)
+	vk.DestroyDevice(self.device, self.allocation_callbacks)
 	delete(self.queue_families)
 	free(self)
 }
