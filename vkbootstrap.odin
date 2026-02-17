@@ -1150,9 +1150,9 @@ destroy_surface :: proc(self: ^Instance, surface: vk.SurfaceKHR, loc := #caller_
 destroy_instance :: proc(self: ^Instance, loc := #caller_location) {
 	assert(self != nil && self.instance != nil, "Invalid Instance", loc)
 	if self.debug_messenger != 0 {
-		vk.DestroyDebugUtilsMessengerEXT(self.instance, self.debug_messenger, nil)
+		vk.DestroyDebugUtilsMessengerEXT(self.instance, self.debug_messenger, self.allocation_callbacks)
 	}
-	vk.DestroyInstance(self.instance, nil)
+	vk.DestroyInstance(self.instance, self.allocation_callbacks)
 	free(self, self.allocator)
 }
 
