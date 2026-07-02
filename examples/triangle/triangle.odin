@@ -18,11 +18,11 @@ MINIMUM_API_VERSION  :: vk.API_VERSION_1_2
 
 Init :: struct {
 	window:          glfw.WindowHandle,
-	instance:        ^vkb.Instance,
+	instance:        vkb.Instance,
 	surface:         vk.SurfaceKHR,
-	physical_device: ^vkb.Physical_Device,
-	device:          ^vkb.Device,
-	swapchain:       ^vkb.Swapchain,
+	physical_device: vkb.Physical_Device,
+	device:          vkb.Device,
+	swapchain:       vkb.Swapchain,
 }
 
 Render_Data :: struct {
@@ -86,21 +86,22 @@ device_initialization :: proc(init: ^Init) -> (ok: bool) {
 	window := create_window_glfw("Vulkan Triangle", resize = true)
 	defer if !ok { destroy_window_glfw(window) }
 
-	instance_builder := vkb.create_instance_builder()
-	defer vkb.destroy_instance_builder(instance_builder)
+	instance_builder: vkb.Instance_Builder
+	vkb.instance_builder_init(&instance_builder)
 
-	vkb.instance_builder_require_api_version(instance_builder, MINIMUM_API_VERSION)
+	vkb.instance_builder_require_api_version(&instance_builder, MINIMUM_API_VERSION)
 
 	when ODIN_DEBUG {
-		info, info_err := vkb.get_system_info()
+		info: vkb.System_Info
+		info_err := vkb.system_info_init(&info)
 		if info_err != nil {
 			fmt.eprintfln("Failed to get system info: %#v", info_err)
 			return
 		}
-		defer vkb.destroy_system_info(info)
+		defer vkb.system_info_uninit(&info)
 
-		vkb.instance_builder_use_default_debug_messenger(instance_builder)
-		vkb.instance_builder_request_validation_layers(instance_builder)
+		vkb.instance_builder_use_default_debug_messenger(&instance_builder)
+		vkb.instance_builder_request_validation_layers(&instance_builder)
 
 		VK_LAYER_LUNARG_MONITOR :: "VK_LAYER_LUNARG_monitor"
 
@@ -109,78 +110,80 @@ device_initialization :: proc(init: ^Init) -> (ok: bool) {
 			// Win32 and XCB windowing systems. Mark as not required layer.
 			// https://vulkan.lunarg.com/doc/sdk/latest/windows/monitor_layer.html
 			when ODIN_OS == .Windows || ODIN_OS == .Linux {
-				vkb.instance_builder_enable_layer(instance_builder, VK_LAYER_LUNARG_MONITOR)
+				vkb.instance_builder_enable_layer(&instance_builder, VK_LAYER_LUNARG_MONITOR)
 			}
 		}
 	}
 
-	vkb_instance, vkb_instance_err := vkb.instance_builder_build(instance_builder)
+	vkb_instance_err := vkb.instance_builder_build(&instance_builder, &init.instance)
 	if vkb_instance_err != nil {
 		fmt.eprintfln("Failed to build instance: %#v", vkb_instance_err)
 		return
 	}
 	defer if !ok {
-		vkb.destroy_instance(vkb_instance)
+		vkb.destroy_instance(&init.instance)
 	}
 
 	// Surface
-	surface := create_surface_glfw(vkb_instance.instance, window)
+	surface := create_surface_glfw(init.instance.vk_instance, window)
 	defer if !ok {
-		vkb.destroy_surface(vkb_instance, surface)
+		vkb.destroy_surface(&init.instance, surface)
 	}
 
 	// Physical device
-	selector := vkb.create_physical_device_selector(vkb_instance)
-	defer vkb.destroy_physical_device_selector(selector)
+	selector: vkb.Physical_Device_Selector
+	vkb.physical_device_selector_init(&selector, init.instance)
+	defer vkb.physical_device_selector_uninit(&selector)
 
-	vkb.physical_device_selector_set_minimum_version(selector, MINIMUM_API_VERSION)
-	vkb.physical_device_selector_set_surface(selector, surface)
+	vkb.physical_device_selector_set_minimum_version(&selector, MINIMUM_API_VERSION)
+	vkb.physical_device_selector_set_surface(&selector, surface)
 
-	vkb_physical_device, vkb_physical_device_err := vkb.physical_device_selector_select(selector)
+	vkb_physical_device_err := vkb.physical_device_selector_select(&selector, &init.physical_device)
 	if vkb_physical_device_err != nil {
 		fmt.eprintfln("Failed to select physical device: %#v", vkb_physical_device_err)
 		return
 	}
 	defer if !ok {
-		vkb.destroy_physical_device(vkb_physical_device)
+		vkb.destroy_physical_device(&init.physical_device)
 	}
 
 	// Deice
-	device_builder := vkb.create_device_builder(vkb_physical_device)
-	defer vkb.destroy_device_builder(device_builder)
+	device_builder: vkb.Device_Builder
+	vkb.device_builder_init(&device_builder)
+	defer vkb.device_builder_uninit(&device_builder)
 
-	vkb_device, vkb_device_err := vkb.device_builder_build(device_builder)
+	vkb_device_err := vkb.device_builder_build(
+		&device_builder, &init.physical_device, &init.device)
 	if vkb_device_err != nil {
 		fmt.eprintfln("Failed to get logical device: %#v", vkb_device_err)
 		return
 	}
 
 	init.window = window
-	init.instance = vkb_instance
 	init.surface = surface
-	init.physical_device = vkb_physical_device
-	init.device = vkb_device
 
 	return true
 }
 
 create_swapchain :: proc(init: ^Init) -> (ok: bool) {
-	builder := vkb.create_swapchain_builder(init.device)
-	defer vkb.destroy_swapchain_builder(builder)
+	builder: vkb.Swapchain_Builder
+	vkb.swapchain_builder_init(&builder, init.device)
+	defer vkb.swapchain_builder_uninit(&builder)
 
-	vkb.swapchain_builder_set_old_swapchain(builder, init.swapchain)
+	vkb.swapchain_builder_set_old_swapchain(&builder, init.swapchain)
 	// Set default surface format and color space: `B8G8R8A8_SRGB, SRGB_NONLINEAR`
-	vkb.swapchain_builder_use_default_format_selection(builder)
+	vkb.swapchain_builder_use_default_format_selection(&builder)
 	// Use hard VSync, which will limit the FPS to the speed of the monitor
-	vkb.swapchain_builder_set_desired_present_mode(builder, .FIFO)
+	vkb.swapchain_builder_set_desired_present_mode(&builder, .FIFO)
 
-	swapchain, swapchain_err := vkb.swapchain_builder_build(builder)
+	swapchain: vkb.Swapchain
+	swapchain_err := vkb.swapchain_builder_build(&builder, &swapchain)
 	if swapchain_err != nil {
 		fmt.eprintfln("Failed to build swapchain: %#v", swapchain_err)
 		return
 	}
-	if init.swapchain != nil {
-		vkb.destroy_swapchain(init.swapchain)
+	if init.swapchain.vk_swapchain != {} {
+		vkb.destroy_swapchain(&init.swapchain)
 	}
 	init.swapchain = swapchain
 	return true
@@ -207,7 +210,7 @@ get_queues :: proc(init: ^Init, data: ^Render_Data) -> (ok: bool) {
 
 create_render_pass :: proc(init: ^Init, data: ^Render_Data) -> (ok: bool) {
 	color_attachment := vk.AttachmentDescription {
-		format         = init.swapchain.image_format,
+		format         = init.swapchain.vk_image_format,
 		samples        = {._1},
 		loadOp         = .CLEAR,
 		storeOp        = .STORE,
@@ -248,7 +251,7 @@ create_render_pass :: proc(init: ^Init, data: ^Render_Data) -> (ok: bool) {
 	}
 
 	if res := vk.CreateRenderPass(
-		init.device.device,
+		init.device.vk_device,
 		&render_pass_info,
 		nil,
 		&data.render_pass,
@@ -268,7 +271,7 @@ create_shader_module :: proc(init: ^Init, code: []u8) -> (shader_module: vk.Shad
 	}
 
 	if res := vk.CreateShaderModule(
-		init.device.device,
+		init.device.vk_device,
 		&vertex_module_info,
 		nil,
 		&shader_module,
@@ -284,11 +287,11 @@ create_graphics_pipeline :: proc(init: ^Init, data: ^Render_Data) -> (ok: bool) 
 	// Create the modules for each shader
 	vertex_shader_code := #load("./shaders/shader_vert.spv")
 	vertex_shader_module := create_shader_module(init, vertex_shader_code) or_return
-	defer vk.DestroyShaderModule(init.device.device, vertex_shader_module, nil)
+	defer vk.DestroyShaderModule(init.device.vk_device, vertex_shader_module, nil)
 
 	fragment_shader_code := #load("./shaders/shader_frag.spv")
 	fragment_shader_module := create_shader_module(init, fragment_shader_code) or_return
-	defer vk.DestroyShaderModule(init.device.device, fragment_shader_module, nil)
+	defer vk.DestroyShaderModule(init.device.vk_device, fragment_shader_module, nil)
 
 	// Create stage info for each shader
 	vertex_stage_info := vk.PipelineShaderStageCreateInfo {
@@ -335,15 +338,15 @@ create_graphics_pipeline :: proc(init: ^Init, data: ^Render_Data) -> (ok: bool) 
 	viewport := vk.Viewport {
 		x        = 0.0,
 		y        = 0.0,
-		width    = cast(f32)init.swapchain.extent.width,
-		height   = cast(f32)init.swapchain.extent.height,
+		width    = cast(f32)init.swapchain.vk_extent.width,
+		height   = cast(f32)init.swapchain.vk_extent.height,
 		minDepth = 0.0,
 		maxDepth = 1.0,
 	}
 
 	scissor := vk.Rect2D {
 		offset = {0, 0},
-		extent = init.swapchain.extent,
+		extent = init.swapchain.vk_extent,
 	}
 
 	viewport_state := vk.PipelineViewportStateCreateInfo {
@@ -408,7 +411,7 @@ create_graphics_pipeline :: proc(init: ^Init, data: ^Render_Data) -> (ok: bool) 
 	}
 
 	if res := vk.CreatePipelineLayout(
-		init.device.device,
+		init.device.vk_device,
 		&pipeline_layout_info,
 		nil,
 		&data.pipeline_layout,
@@ -435,7 +438,7 @@ create_graphics_pipeline :: proc(init: ^Init, data: ^Render_Data) -> (ok: bool) 
 	}
 
 	if res := vk.CreateGraphicsPipelines(
-		init.device.device,
+		init.device.vk_device,
 		0,
 		1,
 		&pipeline_info,
@@ -475,13 +478,13 @@ create_framebuffers :: proc(init: ^Init, data: ^Render_Data) -> (ok: bool) {
 			renderPass      = data.render_pass,
 			attachmentCount = 1,
 			pAttachments    = raw_data(attachments),
-			width           = init.swapchain.extent.width,
-			height          = init.swapchain.extent.height,
+			width           = init.swapchain.vk_extent.width,
+			height          = init.swapchain.vk_extent.height,
 			layers          = 1,
 		}
 
 		if res := vk.CreateFramebuffer(
-			init.device.device,
+			init.device.vk_device,
 			&framebuffer_info,
 			nil,
 			&data.framebuffers[i],
@@ -508,7 +511,7 @@ create_command_pool :: proc(init: ^Init, data: ^Render_Data) -> (ok: bool) {
 	}
 
 	if res := vk.CreateCommandPool(
-		init.device.device,
+		init.device.vk_device,
 		&create_info,
 		nil,
 		&data.command_pool,
@@ -532,7 +535,7 @@ create_command_buffers :: proc(init: ^Init, data: ^Render_Data) -> (ok: bool) {
 	}
 
 	if res := vk.AllocateCommandBuffers(
-		init.device.device,
+		init.device.vk_device,
 		&allocate_info,
 		raw_data(data.command_buffers),
 	); res != .SUCCESS {
@@ -574,7 +577,7 @@ record_command_buffer :: proc(
 		sType           = .RENDER_PASS_BEGIN_INFO,
 		renderPass      = data.render_pass,
 		framebuffer     = data.framebuffers[image_index],
-		renderArea      = { offset = {0, 0}, extent = init.swapchain.extent },
+		renderArea      = { offset = {0, 0}, extent = init.swapchain.vk_extent },
 		clearValueCount = 1,
 		pClearValues    = &clear_color,
 	}
@@ -582,14 +585,14 @@ record_command_buffer :: proc(
 	viewport: vk.Viewport
 	viewport.x = 0.0
 	viewport.y = 0.0
-	viewport.width = f32(init.swapchain.extent.width)
-	viewport.height = f32(init.swapchain.extent.height)
+	viewport.width = f32(init.swapchain.vk_extent.width)
+	viewport.height = f32(init.swapchain.vk_extent.height)
 	viewport.minDepth = 0.0
 	viewport.maxDepth = 1.0
 
 	scissor: vk.Rect2D
 	scissor.offset = {0, 0}
-	scissor.extent = init.swapchain.extent
+	scissor.extent = init.swapchain.vk_extent
 
 	vk.CmdSetViewport(buffer, 0, 1, &viewport)
 	vk.CmdSetScissor(buffer, 0, 1, &scissor)
@@ -627,7 +630,7 @@ create_sync_objects :: proc(init: ^Init, data: ^Render_Data) -> (ok: bool) {
 
 	for i in 0 ..< init.swapchain.image_count {
 		if res := vk.CreateSemaphore(
-			init.device.device,
+			init.device.vk_device,
 			&semaphore_info,
 			nil,
 			&data.finished_semaphores[i],
@@ -639,7 +642,7 @@ create_sync_objects :: proc(init: ^Init, data: ^Render_Data) -> (ok: bool) {
 
     for i in 0 ..< MAX_FRAMES_IN_FLIGHT {
 		if res := vk.CreateSemaphore(
-			init.device.device,
+			init.device.vk_device,
 			&semaphore_info,
 			nil,
 			&data.available_semaphores[i],
@@ -648,7 +651,7 @@ create_sync_objects :: proc(init: ^Init, data: ^Render_Data) -> (ok: bool) {
 			return
 		}
 
-		if res := vk.CreateFence(init.device.device, &fence_info, nil, &data.in_flight_fences[i]);
+		if res := vk.CreateFence(init.device.vk_device, &fence_info, nil, &data.in_flight_fences[i]);
 		   res != .SUCCESS {
 			log.errorf("Failed to create \"in_flight\" fence: [%v]", res)
 			return
@@ -659,14 +662,14 @@ create_sync_objects :: proc(init: ^Init, data: ^Render_Data) -> (ok: bool) {
 }
 
 recreate_swapchain :: proc(init: ^Init, data: ^Render_Data) -> (ok: bool) {
-	vk.DeviceWaitIdle(init.device.device)
+	vk.DeviceWaitIdle(init.device.vk_device)
 
-	vk.DestroyCommandPool(init.device.device, data.command_pool, nil)
+	vk.DestroyCommandPool(init.device.vk_device, data.command_pool, nil)
 
 	delete(data.command_buffers)
 
 	for &v in data.framebuffers {
-		vk.DestroyFramebuffer(init.device.device, v, nil)
+		vk.DestroyFramebuffer(init.device.vk_device, v, nil)
 	}
 	delete(data.framebuffers)
 
@@ -684,7 +687,7 @@ recreate_swapchain :: proc(init: ^Init, data: ^Render_Data) -> (ok: bool) {
 
 draw_frame :: proc(init: ^Init, data: ^Render_Data) -> (ok: bool) {
 	vk.WaitForFences(
-		init.device.device,
+		init.device.vk_device,
 		1,
 		&data.in_flight_fences[data.current_frame],
 		true,
@@ -693,8 +696,8 @@ draw_frame :: proc(init: ^Init, data: ^Render_Data) -> (ok: bool) {
 
 	image_index: u32 = 0
 	if res := vk.AcquireNextImageKHR(
-		init.device.device,
-		init.swapchain.swapchain,
+		init.device.vk_device,
+		init.swapchain.vk_swapchain,
 		max(u64),
 		data.available_semaphores[data.current_frame],
 		0,
@@ -709,7 +712,7 @@ draw_frame :: proc(init: ^Init, data: ^Render_Data) -> (ok: bool) {
 	// Wait for the fence associated with this image if it's in use
 	if data.image_in_flight[image_index] != 0 {
 		vk.WaitForFences(
-			init.device.device,
+			init.device.vk_device,
 			1,
 			&data.image_in_flight[image_index],
 			true,
@@ -733,7 +736,7 @@ draw_frame :: proc(init: ^Init, data: ^Render_Data) -> (ok: bool) {
 	}
 
 	// Reset fence before submitting
-	vk.ResetFences(init.device.device, 1, &data.in_flight_fences[data.current_frame])
+	vk.ResetFences(init.device.vk_device, 1, &data.in_flight_fences[data.current_frame])
 
 	if res := vk.QueueSubmit(
 		data.graphics_queue,
@@ -745,7 +748,7 @@ draw_frame :: proc(init: ^Init, data: ^Render_Data) -> (ok: bool) {
 		return
 	}
 
-	swapchains := []vk.SwapchainKHR{init.swapchain.swapchain}
+	swapchains := []vk.SwapchainKHR{init.swapchain.vk_swapchain}
 	present_info := vk.PresentInfoKHR {
 		sType              = .PRESENT_INFO_KHR,
 		waitSemaphoreCount = 1,
@@ -770,15 +773,15 @@ draw_frame :: proc(init: ^Init, data: ^Render_Data) -> (ok: bool) {
 
 cleanup :: proc(init: ^Init, data: ^Render_Data) {
 	// Wait for all operations to complete before cleanup
-	vk.DeviceWaitIdle(init.device.device)
+	vk.DeviceWaitIdle(init.device.vk_device)
 
 	// Destroy synchronization objects
 	for i in 0 ..< init.swapchain.image_count {
-		vk.DestroySemaphore(init.device.device, data.finished_semaphores[i], nil)
+		vk.DestroySemaphore(init.device.vk_device, data.finished_semaphores[i], nil)
 	}
 	for i in 0 ..< MAX_FRAMES_IN_FLIGHT {
-		vk.DestroySemaphore(init.device.device, data.available_semaphores[i], nil)
-		vk.DestroyFence(init.device.device, data.in_flight_fences[i], nil)
+		vk.DestroySemaphore(init.device.vk_device, data.available_semaphores[i], nil)
+		vk.DestroyFence(init.device.vk_device, data.in_flight_fences[i], nil)
 	}
 	delete(data.finished_semaphores)
 	delete(data.available_semaphores)
@@ -786,31 +789,31 @@ cleanup :: proc(init: ^Init, data: ^Render_Data) {
 	delete(data.image_in_flight)
 
 	// Destroy command pool (this automatically frees command buffers)
-	vk.DestroyCommandPool(init.device.device, data.command_pool, nil)
+	vk.DestroyCommandPool(init.device.vk_device, data.command_pool, nil)
 	delete(data.command_buffers)
 
 	// Destroy framebuffers
 	for framebuffer in data.framebuffers {
-		vk.DestroyFramebuffer(init.device.device, framebuffer, nil)
+		vk.DestroyFramebuffer(init.device.vk_device, framebuffer, nil)
 	}
 	delete(data.framebuffers)
 
 	// Destroy pipeline and render pass
-	vk.DestroyPipeline(init.device.device, data.graphics_pipeline, nil)
-	vk.DestroyPipelineLayout(init.device.device, data.pipeline_layout, nil)
-	vk.DestroyRenderPass(init.device.device, data.render_pass, nil)
+	vk.DestroyPipeline(init.device.vk_device, data.graphics_pipeline, nil)
+	vk.DestroyPipelineLayout(init.device.vk_device, data.pipeline_layout, nil)
+	vk.DestroyRenderPass(init.device.vk_device, data.render_pass, nil)
 
 	// Destroy swapchain resources
 	vkb.swapchain_destroy_image_views(init.swapchain, data.swapchain_image_views)
 	delete(data.swapchain_image_views)
 	delete(data.swapchain_images)
-	vkb.destroy_swapchain(init.swapchain)
+	vkb.destroy_swapchain(&init.swapchain)
 
 	// Destroy device and instance
-	vkb.destroy_device(init.device)
-	vkb.destroy_physical_device(init.physical_device)
-	vkb.destroy_surface(init.instance, init.surface)
-	vkb.destroy_instance(init.instance)
+	vkb.destroy_device(&init.device)
+	vkb.destroy_physical_device(&init.physical_device)
+	vkb.destroy_surface(&init.instance, init.surface)
+	vkb.destroy_instance(&init.instance)
 
 	// Destroy window
 	destroy_window_glfw(init.window)

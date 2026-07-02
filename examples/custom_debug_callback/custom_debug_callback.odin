@@ -11,13 +11,14 @@ import vkb "../../"
 import vk "vendor:vulkan"
 
 main :: proc() {
-	builder := vkb.create_instance_builder()
-	defer vkb.destroy_instance_builder(builder)
+	builder: vkb.Instance_Builder
+	vkb.instance_builder_init(&builder)
+	defer vkb.instance_builder_uninit(&builder)
 
-	vkb.instance_builder_request_validation_layers(builder)
-	vkb.instance_builder_set_headless(builder)
+	vkb.instance_builder_request_validation_layers(&builder)
+	vkb.instance_builder_set_headless(&builder)
 
-	vkb.instance_builder_set_debug_callback(builder, proc "system" (
+	vkb.instance_builder_set_debug_callback(&builder, proc "system" (
 		messageSeverity: vk.DebugUtilsMessageSeverityFlagsEXT,
 		messageTypes: vk.DebugUtilsMessageTypeFlagsEXT,
 		pCallbackData: ^vk.DebugUtilsMessengerCallbackDataEXT,
@@ -30,36 +31,43 @@ main :: proc() {
 		return true
 	})
 
-	vkb_instance, vkb_instance_err := vkb.instance_builder_build(builder)
+    vkb_instance: vkb.Instance
+	vkb_instance_err := vkb.instance_builder_build(&builder, &vkb_instance)
 	if vkb_instance_err != nil {
 		fmt.eprintfln("Failed to build instance: %#v", vkb_instance_err)
 		return
 	}
-	defer vkb.destroy_instance(vkb_instance)
+	defer vkb.destroy_instance(&vkb_instance)
 
-	selector := vkb.create_physical_device_selector(vkb_instance)
-	defer vkb.destroy_physical_device_selector(selector)
+	selector: vkb.Physical_Device_Selector
+	vkb.physical_device_selector_init(&selector, vkb_instance)
+	defer vkb.physical_device_selector_uninit(&selector)
 
-	vkb.physical_device_selector_add_required_extension(selector, vk.KHR_DRIVER_PROPERTIES_EXTENSION_NAME)
+	vkb.physical_device_selector_add_required_extension(&selector,
+		vk.KHR_DRIVER_PROPERTIES_EXTENSION_NAME)
 
-	vkb_physical_device, vkb_physical_device_err := vkb.physical_device_selector_select(selector)
+	vkb_physical_device: vkb.Physical_Device
+	vkb_physical_device_err := vkb.physical_device_selector_select(&selector, &vkb_physical_device)
 	if vkb_physical_device_err != nil {
 		fmt.eprintfln("Failed to select physical device: %#v", vkb_physical_device_err)
 		return
 	}
-	defer vkb.destroy_physical_device(vkb_physical_device)
+	defer vkb.destroy_physical_device(&vkb_physical_device)
 
 	fmt.printfln("Selected device: %s", vkb_physical_device.name)
 
-	device_builder := vkb.create_device_builder(vkb_physical_device)
-	defer vkb.destroy_device_builder(device_builder)
+	device_builder: vkb.Device_Builder
+	vkb.device_builder_init(&device_builder)
+	defer vkb.device_builder_uninit(&device_builder)
 
-	vkb_device, vkb_device_err := vkb.device_builder_build(device_builder)
+	vkb_device: vkb.Device
+	vkb_device_err := vkb.device_builder_build(
+		&device_builder, &vkb_physical_device, &vkb_device)
 	if vkb_device_err != nil {
 		fmt.eprintfln("Failed to get logical device: %#v", vkb_device_err)
 		return
 	}
-	defer vkb.destroy_device(vkb_device)
+	defer vkb.destroy_device(&vkb_device)
 
 	buffer_info := vk.BufferCreateInfo {
 		sType = .BUFFER_CREATE_INFO,
@@ -71,7 +79,7 @@ main :: proc() {
     buffer_info.size = 0
 
 	my_buffer: vk.Buffer
-    res := vk.CreateBuffer(vkb_device.device, &buffer_info, nil, &my_buffer)
+    res := vk.CreateBuffer(vkb_device.vk_device, &buffer_info, nil, &my_buffer)
     if res == .ERROR_VALIDATION_FAILED_EXT {
         // If we return true in our callback, the validation will block the function from
         // calling the driver and return back this vk.Result.

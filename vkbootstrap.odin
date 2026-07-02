@@ -1,6 +1,7 @@
 package vkbootstrap
 
 // Core
+import "base:intrinsics"
 import "base:runtime"
 import "core:dynlib"
 import "core:fmt"
@@ -150,20 +151,26 @@ System_Info :: struct {
 	instance_api_version:        u32,
 
 	// Internal
-	arena:                       mem.Arena,
-	arena_buf:                   []byte,
 	allocator:                   runtime.Allocator,
+	arena_buf:                   []byte,
+	arena:                       mem.Arena,
+	initialized:                 bool,
 }
 
 @(require_results)
-get_system_info :: proc(
+system_info_init :: proc(
+	self: ^System_Info,
 	fp_get_instance_proc_addr: vk.ProcGetInstanceProcAddr = nil,
 	allocator := context.allocator,
 	loc := #caller_location,
 ) -> (
-	info: ^System_Info,
 	err: Error,
 ) {
+	assert(self != nil, "Invalid system info", loc)
+	assert(self.initialized == false, "System info already initialized", loc)
+
+	self^ = {} // clear memory
+
 	// When using externally provided function pointers we assume the loader is available,
 	// otherwise, the Vulkan library is loaded
 	if !load_library(fp_get_instance_proc_addr, loc) {
@@ -174,25 +181,26 @@ get_system_info :: proc(
 		return
 	}
 
-	context.allocator = allocator
-
-	arena: mem.Arena
-	arena_buf := make([]byte, 64 * mem.Kilobyte, allocator)
-	defer if err != nil { delete(arena_buf) }
-	mem.arena_init(&arena, arena_buf)
-
-	arena_allocator := mem.arena_allocator(&arena)
-
 	ta := context.temp_allocator
 	runtime.DEFAULT_TEMP_ALLOCATOR_TEMP_GUARD(ignore = allocator == ta)
+
+	self.allocator = allocator
+	self.arena_buf = make([]byte, 512 * mem.Kilobyte, self.allocator)
+	defer if err != nil { delete(self.arena_buf, self.allocator) }
+	mem.arena_init(&self.arena, self.arena_buf)
+
+	buf_allocator := mem.arena_allocator(&self.arena)
 
 	layer_count: u32
 	vk_check(vk.EnumerateInstanceLayerProperties(
 		&layer_count, nil,
 	), "Failed to enumerate instance layer properties count", loc) or_return
 
-	available_layers := make(map[string]vk.LayerProperties, layer_count, allocator)
-	available_layer_names := make([dynamic]string, 0, layer_count, allocator)
+	available_layers := make(map[string]vk.LayerProperties, layer_count, self.allocator)
+	defer if err != nil { delete(available_layers) }
+
+	available_layer_names := make([dynamic]string, 0, layer_count, self.allocator)
+	defer if err != nil { delete(available_layer_names) }
 
 	validation_layers_available: bool
 	if layer_count > 0 {
@@ -203,7 +211,7 @@ get_system_info :: proc(
 
 		// Add layers to map
 		for &layer in layers {
-			layer_name := strings.clone(byte_arr_str(&layer.layerName), arena_allocator)
+			layer_name := strings.clone(byte_arr_str(&layer.layerName), buf_allocator)
 			available_layers[layer_name] = layer
 			append(&available_layer_names, layer_name)
 
@@ -222,14 +230,17 @@ get_system_info :: proc(
 	available_extensions := make(
 		map[string]vk.ExtensionProperties,
 		int(extension_count),
-		allocator,
+		self.allocator,
 	)
+	defer if err != nil { delete(available_extensions) }
+
 	available_extension_names := make(
 		[dynamic]string,
 		0,
 		int(extension_count),
-		allocator,
+		self.allocator,
 	)
+	defer if err != nil { delete(available_extension_names) }
 
 	debug_utils_available: bool
 	if extension_count > 0 {
@@ -242,7 +253,7 @@ get_system_info :: proc(
 
 		// Add global extensions to map
 		for &ext in global_extensions {
-			ext_name := strings.clone(byte_arr_str(&ext.extensionName), arena_allocator)
+			ext_name := strings.clone(byte_arr_str(&ext.extensionName), buf_allocator)
 			available_extensions[ext_name] = ext
 			append(&available_extension_names, ext_name)
 
@@ -278,7 +289,7 @@ get_system_info :: proc(
 
 			// Only add if not already in map
 			if ext_name not_in available_extensions {
-				ext_name_key := strings.clone(byte_arr_str(&ext.extensionName), arena_allocator)
+				ext_name_key := strings.clone(byte_arr_str(&ext.extensionName), buf_allocator)
 				available_extensions[ext_name_key] = ext
 				append(&available_extension_names, ext_name_key)
 			}
@@ -305,45 +316,39 @@ get_system_info :: proc(
 	slice.sort(available_layer_names[:])
 	slice.sort(available_extension_names[:])
 
-	info = new_clone(System_Info {
-		available_layers            = available_layers,
-		available_layer_names       = available_layer_names[:],
-		available_extension_names   = available_extension_names[:],
-		available_extensions        = available_extensions,
-		validation_layers_available = validation_layers_available,
-		debug_utils_available       = debug_utils_available,
-		instance_api_version        = instance_api_version,
-		arena                       = arena,
-		arena_buf                   = arena_buf,
-		allocator                   = allocator,
-	}, allocator)
-	assert(info != nil, "Failed to allocate System_Info", loc)
+	self.available_layers            = available_layers
+	self.available_layer_names       = available_layer_names[:]
+	self.available_extension_names   = available_extension_names[:]
+	self.available_extensions        = available_extensions
+	self.validation_layers_available = validation_layers_available
+	self.debug_utils_available       = debug_utils_available
+	self.instance_api_version        = instance_api_version
+	self.initialized                 = true
 
 	return
 }
 
-destroy_system_info :: proc(
-	self: ^System_Info,
-	allocator := context.allocator,
-	loc := #caller_location,
-) {
-	assert(self != nil, "Invalid System_Info", loc)
-	context.allocator = allocator
+system_info_uninit :: proc(self: ^System_Info, loc := #caller_location) {
+	assert(self != nil, "Invalid system info", loc)
+	assert(self.initialized, "System info is not initialized", loc)
+
+	context.allocator = self.allocator
 	delete(self.arena_buf)
 	delete(self.available_layers)
-	delete(self.available_extensions)
 	delete(self.available_layer_names)
+	delete(self.available_extensions)
 	delete(self.available_extension_names)
-	free(self)
+
+	self.initialized = false
 }
 
 // Returns `true` if a layer is available.
-system_info_is_layer_available :: proc(self: ^System_Info, layer_name: string) -> bool {
+system_info_is_layer_available :: proc(self: System_Info, layer_name: string) -> bool {
 	return layer_name in self.available_layers
 }
 
 // Returns `true` if all layers are available.
-system_info_is_layers_available_string :: proc(self: ^System_Info, required_layers: []string) -> bool {
+system_info_is_layers_available_string :: proc(self: System_Info, required_layers: []string) -> bool {
 	for required in required_layers {
 		if required not_in self.available_layers {
 			return false
@@ -353,7 +358,7 @@ system_info_is_layers_available_string :: proc(self: ^System_Info, required_laye
 }
 
 // Returns `true` if all layers are available.
-system_info_is_layers_available_cstring :: proc(self: ^System_Info, required_layers: []cstring) -> bool {
+system_info_is_layers_available_cstring :: proc(self: System_Info, required_layers: []cstring) -> bool {
 	for required in required_layers {
 		if string(required) not_in self.available_layers {
 			return false
@@ -369,17 +374,17 @@ system_info_is_layers_available :: proc {
 }
 
 // Returns a list view of available layer names.
-system_info_get_layer_names :: proc(self: ^System_Info) -> []string {
+system_info_get_layer_names :: proc(self: System_Info) -> []string {
 	return  self.available_layer_names
 }
 
 // Returns `true` if an extension is available.
-system_info_is_extension_available :: proc(self: ^System_Info, extension_name: string) -> bool {
+system_info_is_extension_available :: proc(self: System_Info, extension_name: string) -> bool {
 	return extension_name in self.available_extensions
 }
 
 // Returns `true` if all extensions are available.
-system_info_is_extensions_available_string :: proc(self: ^System_Info, required_extensions: []string) -> bool {
+system_info_is_extensions_available_string :: proc(self: System_Info, required_extensions: []string) -> bool {
 	for required in required_extensions {
 		if required not_in self.available_extensions {
 			return false
@@ -389,7 +394,7 @@ system_info_is_extensions_available_string :: proc(self: ^System_Info, required_
 }
 
 // Returns `true` if all extensions are available.
-system_info_is_extensions_available_cstring :: proc(self: ^System_Info, required_extensions: []cstring) -> bool {
+system_info_is_extensions_available_cstring :: proc(self: System_Info, required_extensions: []cstring) -> bool {
 	for required in required_extensions {
 		if string(required) not_in self.available_extensions {
 			return false
@@ -405,13 +410,13 @@ system_info_is_extensions_available :: proc {
 }
 
 // Returns a list view of available extension names.
-system_info_get_extension_names :: proc(self: ^System_Info) -> []string {
+system_info_get_extension_names :: proc(self: System_Info) -> []string {
 	return  self.available_extension_names
 }
 
 // Get layer properties by name.
 system_info_get_layer :: proc(
-	self: ^System_Info,
+	self: System_Info,
 	layer_name: string,
 ) -> (
 	layer: vk.LayerProperties,
@@ -423,7 +428,7 @@ system_info_get_layer :: proc(
 
 // Get extension properties by name.
 system_info_get_extension :: proc(
-	self: ^System_Info,
+	self: System_Info,
 	extension_name: string,
 ) -> (
 	extension: vk.ExtensionProperties,
@@ -434,8 +439,8 @@ system_info_get_extension :: proc(
 }
 
 // Returns `true` if the Instance API Version is greater than or equal to the specified version.
-system_info_is_instance_version_available_value :: proc(
-	self: ^System_Info,
+system_info_is_instance_version_available_values :: proc(
+	self: System_Info,
 	major_api_version, minor_api_version: u32,
 ) -> bool {
 	return self.instance_api_version >= vk.MAKE_VERSION(major_api_version, minor_api_version, 0)
@@ -444,7 +449,9 @@ system_info_is_instance_version_available_value :: proc(
 // Returns `true` if the Instance API Version is greater than or equal to the specified version.
 //
 // Should be constructed with `vk.MAKE_VERSION`.
-system_info_is_instance_version_available_values :: proc(self: ^System_Info, api_version: u32) -> bool {
+system_info_is_instance_version_available_value :: proc(
+	self: System_Info, api_version: u32,
+) -> bool {
 	return self.instance_api_version >= api_version
 }
 
@@ -499,83 +506,79 @@ Instance_Builder :: struct {
 	initialized:                  bool,
 }
 
-instance_builder_make_default :: proc(
-	allocator := context.allocator,
-	loc := #caller_location,
-) -> ^Instance_Builder {
-	out := new_clone(Instance_Builder{
-		allocator = allocator,
-		initialized = true,
-	}, allocator)
-	instance_builder_init_default(out, allocator)
-	return out
-}
+instance_builder_init :: proc(
+	self: ^Instance_Builder, allocator := context.allocator, loc := #caller_location,
+) {
+	assert(self != nil, "Invalid instance builder", loc)
+	assert(self.initialized == false, "Instance builder already initialized", loc)
 
-instance_builder_make_with_proc_addr :: proc(
-	get_instance_proc_addr: vk.ProcGetInstanceProcAddr,
-	allocator := context.allocator,
-	loc := #caller_location,
-) -> ^Instance_Builder {
-	assert(get_instance_proc_addr != nil, loc = loc)
-	out := new_clone(Instance_Builder{
-		get_instance_proc_addr = get_instance_proc_addr,
-		allocator = allocator,
-		initialized = true,
-	}, allocator)
-	instance_builder_init_default(out, allocator)
-	return out
-}
-
-instance_builder_init_default :: proc(self: ^Instance_Builder, allocator: runtime.Allocator) {
 	self.required_api_version = vk.API_VERSION_1_0
 	self.debug_message_severity = { .WARNING, .ERROR }
 	self.debug_message_type = { .GENERAL, .VALIDATION, .PERFORMANCE }
-	self.layers.allocator = allocator
-	self.extensions.allocator = allocator
-	self.layer_settings.allocator = allocator
-	self.disabled_validation_checks.allocator = allocator
-	self.enabled_validation_features.allocator = allocator
-	self.disabled_validation_features.allocator = allocator
+
+	self.allocator = allocator
+	self.layers = make([dynamic]string, 0, 16, self.allocator)
+	self.extensions = make([dynamic]string, 0, 16, self.allocator)
+	self.layer_settings = make([dynamic]vk.LayerSettingEXT, 0, 16, self.allocator)
+	self.disabled_validation_checks = make([dynamic]vk.ValidationCheckEXT, 0, 16, self.allocator)
+	self.enabled_validation_features =
+		make([dynamic]vk.ValidationFeatureEnableEXT, 0, 16, self.allocator)
+	self.disabled_validation_features =
+		make([dynamic]vk.ValidationFeatureDisableEXT, 0, 16, self.allocator)
+
+	self.initialized = true
 }
 
-create_instance_builder :: proc {
-	instance_builder_make_default,
-	instance_builder_make_with_proc_addr,
+instance_builder_init_with_proc_addr :: proc(
+	self: ^Instance_Builder,
+	get_instance_proc_addr: vk.ProcGetInstanceProcAddr = nil,
+	allocator := context.allocator,
+	loc := #caller_location,
+) {
+	assert(self != nil, "Invalid instance builder", loc)
+	assert(get_instance_proc_addr != nil, "Invalid vk.ProcGetInstanceProcAddr", loc)
+	instance_builder_init(self, allocator, loc)
+	self.get_instance_proc_addr = get_instance_proc_addr
 }
 
-destroy_instance_builder :: proc(self: ^Instance_Builder, loc := #caller_location) {
-	assert(self != nil, loc = loc)
+instance_builder_uninit :: proc(self: ^Instance_Builder, loc := #caller_location) {
+	assert(self != nil, "Invalid instance builder", loc)
+	assert(self.initialized, "Instance builder not initialized", loc)
+
 	context.allocator = self.allocator
-	delete(self.layers)
-	delete(self.extensions)
-	delete(self.layer_settings)
-	delete(self.disabled_validation_checks)
-	delete(self.enabled_validation_features)
 	delete(self.disabled_validation_features)
-	free(self)
+	delete(self.enabled_validation_features)
+	delete(self.disabled_validation_checks)
+	delete(self.layer_settings)
+	delete(self.extensions)
+	delete(self.layers)
+
+	self.initialized = false
 }
 
 @(require_results)
 instance_builder_build :: proc(
 	self: ^Instance_Builder,
+	instance: ^Instance,
 	allocator := context.allocator,
 	loc := #caller_location,
 ) -> (
-	instance: ^Instance,
 	err: Error,
 ) {
-	assert(self != nil, loc = loc)
 	assert(self.initialized, "Instance builder not initialized", loc)
+	assert(instance != nil, "Invalid out instance", loc)
 
 	ta := context.temp_allocator
 	runtime.DEFAULT_TEMP_ALLOCATOR_TEMP_GUARD(ignore = allocator == ta)
 
-	info, _ := get_system_info(self.get_instance_proc_addr, allocator = ta)
+	info: System_Info
+	system_info_init(&info, self.get_instance_proc_addr, ta) or_return
 
 	instance_version: u32 = vk.API_VERSION_1_0
 
 	// Only check Vulkan version if we have specific version requirements
-	if self.minimum_instance_version > vk.API_VERSION_1_0 || self.required_api_version > vk.API_VERSION_1_0 {
+	if self.minimum_instance_version > vk.API_VERSION_1_0 ||
+			self.required_api_version > vk.API_VERSION_1_0 {
 		// Check if we can query the Vulkan version at all
 		if vk.EnumerateInstanceVersion != nil {
 			// Should always return .SUCCESS
@@ -591,8 +594,10 @@ instance_builder_build :: proc(
 
 		// Verify the queried version meets our requirements
 		if vk.EnumerateInstanceVersion == nil || // Can't query version at all
-		   (self.minimum_instance_version > 0 && instance_version < self.minimum_instance_version) ||
-		   (self.minimum_instance_version == 0 && instance_version < self.required_api_version) {
+		   (self.minimum_instance_version > 0 &&
+				instance_version < self.minimum_instance_version) ||
+		   (self.minimum_instance_version == 0 &&
+				instance_version < self.required_api_version) {
 			// Determine which version to show in the error message
 			version_error := self.minimum_instance_version == 0 \
 				? self.required_api_version : self.minimum_instance_version
@@ -600,35 +605,40 @@ instance_builder_build :: proc(
 			// Generate specific error message based on the minor version component
 			if VK_VERSION_MINOR(version_error) == 4 {
 				err = Instance_Error {
-					.Vulkan_Version_1_4_Unavailable, .ERROR_INITIALIZATION_FAILED, "Vulkan version 1.4 unavailable",
+					.Vulkan_Version_1_4_Unavailable, .ERROR_INITIALIZATION_FAILED,
+					"Vulkan version 1.4 unavailable",
 				}
 				return
 			} else if VK_VERSION_MINOR(version_error) == 3 {
 				err = Instance_Error {
-					.Vulkan_Version_1_3_Unavailable, .ERROR_INITIALIZATION_FAILED, "Vulkan version 1.3 unavailable",
+					.Vulkan_Version_1_3_Unavailable, .ERROR_INITIALIZATION_FAILED,
+					"Vulkan version 1.3 unavailable",
 				}
 				return
 			} else if VK_VERSION_MINOR(version_error) == 2 {
 				err = Instance_Error {
-					.Vulkan_Version_1_2_Unavailable, .ERROR_INITIALIZATION_FAILED, "Vulkan version 1.2 unavailable",
+					.Vulkan_Version_1_2_Unavailable, .ERROR_INITIALIZATION_FAILED,
+					"Vulkan version 1.2 unavailable",
 				}
 				return
 			} else if VK_VERSION_MINOR(version_error) == 1 {
 				err = Instance_Error {
-					.Vulkan_Version_1_1_Unavailable, .ERROR_INITIALIZATION_FAILED, "Vulkan version 1.1 unavailable",
+					.Vulkan_Version_1_1_Unavailable, .ERROR_INITIALIZATION_FAILED,
+					"Vulkan version 1.1 unavailable",
 				}
 				return
 			} else {
 				err = Instance_Error {
-					.Vulkan_Unavailable, .ERROR_INITIALIZATION_FAILED, "Vulkan version unavailable",
+					.Vulkan_Unavailable, .ERROR_INITIALIZATION_FAILED,
+					"Vulkan version unavailable",
 				}
 				return
 			}
 		}
 	}
 
-	// The API version to use is set by required_api_version, unless it isn't set, then it
-	// comes from minimum_instance_version
+	// The API version to use is set by required_api_version, unless it isn't
+	// set, then it comes from minimum_instance_version
 	api_version : u32 = vk.API_VERSION_1_0
 	if self.required_api_version > vk.API_VERSION_1_0 {
 		api_version = self.required_api_version
@@ -658,7 +668,8 @@ instance_builder_build :: proc(
 	}
 	properties2_ext_enabled: bool
 	if api_version < vk.API_VERSION_1_1 &&
-			system_info_is_extension_available(info, vk.KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME) {
+			system_info_is_extension_available(
+				info, vk.KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME) {
 		properties2_ext_enabled = true
 		append(&extensions, vk.KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME)
 	}
@@ -669,7 +680,7 @@ instance_builder_build :: proc(
 
 	when ODIN_OS == .Darwin || #config(VK_KHR_portability_enumeration, false) {
 		portability_enumeration_support: bool
-		if is_extension_available(&info, vk.KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME) {
+		if system_info_is_extension_available(info, vk.KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME) {
 			portability_enumeration_support = true
 			append(&extensions, vk.KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME)
 		}
@@ -680,13 +691,14 @@ instance_builder_build :: proc(
 			append(&extensions, vk.KHR_SURFACE_EXTENSION_NAME)
 		} else {
 			err = Instance_Error {
-				.Windowing_Extensions_Not_Present, .ERROR_INITIALIZATION_FAILED, "Required windowing extension not present!",
+				.Windowing_Extensions_Not_Present, .ERROR_INITIALIZATION_FAILED,
+				"Required windowing extension not present!",
 			}
 			return
 		}
 
 		add_window_ext :: proc(
-			info: ^System_Info,
+			info: System_Info,
 			extension_name: cstring,
 			extensions: ^[dynamic]cstring,
 		) -> bool {
@@ -716,7 +728,8 @@ instance_builder_build :: proc(
 
 		if !added_window_exts {
 			err = Instance_Error {
-				.Windowing_Extensions_Not_Present, .ERROR_INITIALIZATION_FAILED, "Required windowing extension not present!",
+				.Windowing_Extensions_Not_Present, .ERROR_INITIALIZATION_FAILED,
+				"Required windowing extension not present!",
 			}
 			return
 		}
@@ -724,7 +737,8 @@ instance_builder_build :: proc(
 
 	if !system_info_is_extensions_available(info, extensions[:]) {
 		err = Instance_Error {
-			.Requested_Extensions_Not_Present, .ERROR_INITIALIZATION_FAILED, "Requested extensions not present",
+			.Requested_Extensions_Not_Present, .ERROR_INITIALIZATION_FAILED,
+			"Requested extensions not present",
 		}
 		return
 	}
@@ -733,13 +747,15 @@ instance_builder_build :: proc(
 		append(&layers, strings.clone_to_cstring(layer, ta))
 	}
 
-	if self.enable_validation_layers || (self.request_validation_layers && info.validation_layers_available) {
+	if self.enable_validation_layers || (self.request_validation_layers &&
+			info.validation_layers_available) {
 		append(&layers, VALIDATION_LAYER_NAME)
 	}
 
 	if !system_info_is_layers_available(info, layers[:]) {
 		err = Instance_Error {
-			.Requested_Layers_Not_Present, .ERROR_INITIALIZATION_FAILED, "Requested layers not present",
+			.Requested_Layers_Not_Present, .ERROR_INITIALIZATION_FAILED,
+			"Requested layers not present",
 		}
 		return
 	}
@@ -831,16 +847,17 @@ instance_builder_build :: proc(
 		), "vk.CreateDebugUtilsMessengerEXT failed", loc) or_return
 	}
 
-	instance = new_clone(Instance{
-		instance                = vk_instance,
-		debug_messenger         = vk_debug_messenger,
+	instance^ = {
+		vk_instance             = vk_instance,
+		vk_debug_messenger      = vk_debug_messenger,
+		vk_allocation_callbacks = self.allocation_callbacks,
 		headless                = self.headless_context,
 		properties2_ext_enabled = properties2_ext_enabled,
-		allocation_callbacks    = self.allocation_callbacks,
 		instance_version        = instance_version,
 		api_version             = api_version,
 		allocator               = allocator,
-	}, allocator)
+		initialized             = true,
+	}
 
 	return
 }
@@ -1118,7 +1135,9 @@ instance_builder_add_layer_setting :: proc(self: ^Instance_Builder, setting: vk.
 }
 
 // Set many settings on a requested layer via `vk.EXT_layer_settings`.
-instance_builder_add_layer_settings :: proc(self: ^Instance_Builder, settings: []vk.LayerSettingEXT) {
+instance_builder_add_layer_settings :: proc(
+	self: ^Instance_Builder, settings: []vk.LayerSettingEXT,
+) {
 	append(&self.layer_settings, ..settings)
 }
 
@@ -1127,33 +1146,45 @@ instance_builder_add_layer_settings :: proc(self: ^Instance_Builder, settings: [
 // =============================================================================
 
 Instance :: struct {
-	instance               : vk.Instance,
-	debug_messenger        : vk.DebugUtilsMessengerEXT,
-	allocation_callbacks   : ^vk.AllocationCallbacks,
-	get_instance_proc_addr : vk.ProcGetInstanceProcAddr,
-	get_device_proc_addr   : vk.ProcGetDeviceProcAddr,
-	instance_version       : u32,
-	api_version            : u32,
-	headless               : bool,
-	properties2_ext_enabled: bool,
-	allocator              : runtime.Allocator,
+	// Initialization
+	vk_instance:               vk.Instance,
+	vk_debug_messenger:        vk.DebugUtilsMessengerEXT,
+	vk_allocation_callbacks:   ^vk.AllocationCallbacks,
+	vk_get_instance_proc_addr: vk.ProcGetInstanceProcAddr,
+	vk_get_device_proc_addr:   vk.ProcGetDeviceProcAddr,
+	instance_version:          u32,
+	api_version:               u32,
+	headless:                  bool,
+	properties2_ext_enabled:   bool,
+
+	// Internal
+	allocator:                 runtime.Allocator,
+	initialized:               bool,
 }
 
 // Destroy the surface created from this instance.
 destroy_surface :: proc(self: ^Instance, surface: vk.SurfaceKHR, loc := #caller_location) {
-	assert(self != nil && self.instance != nil, "Invalid Instance", loc)
-	assert(surface != 0, "Invalid Surface", loc)
-	vk.DestroySurfaceKHR(self.instance, surface, self.allocation_callbacks)
+	assert(self != nil, "Invalid instance", loc)
+	assert(self.initialized, "Instance not initialized", loc)
+	assert(surface != {}, "Invalid vk.SurfaceKHR handle", loc)
+
+	vk.DestroySurfaceKHR(self.vk_instance, surface, self.vk_allocation_callbacks)
 }
 
-// Destroy the instance and the debug messenger.
+// Destroy the instance and the debug messenger if any.
 destroy_instance :: proc(self: ^Instance, loc := #caller_location) {
-	assert(self != nil && self.instance != nil, "Invalid Instance", loc)
-	if self.debug_messenger != 0 {
-		vk.DestroyDebugUtilsMessengerEXT(self.instance, self.debug_messenger, self.allocation_callbacks)
+	assert(self != nil, "Invalid instance", loc)
+	assert(self.initialized, "Instance not initialized", loc)
+	assert(self.vk_instance != nil, "Invalid vk.Instance handle", loc)
+
+	if self.vk_debug_messenger != 0 {
+		vk.DestroyDebugUtilsMessengerEXT(
+			self.vk_instance, self.vk_debug_messenger, self.vk_allocation_callbacks)
 	}
-	vk.DestroyInstance(self.instance, self.allocation_callbacks)
-	free(self, self.allocator)
+
+	vk.DestroyInstance(self.vk_instance, self.vk_allocation_callbacks)
+
+	self.initialized = false
 }
 
 // =============================================================================
@@ -1168,66 +1199,64 @@ Preferred_Device_Type :: enum {
 	Cpu,
 }
 
-Unsuitability_Reasons :: struct {
-	reasons:   [dynamic]string,
-	arena:     mem.Arena,
-	arena_buf: []byte,
+Physical_Device_Selector_Criteria :: struct {
+	name:                             string,
+	preferred_type:                   Preferred_Device_Type,
+	allow_any_type:                   bool,
+	require_present:                  bool,
+	require_dedicated_transfer_queue: bool,
+	require_dedicated_compute_queue:  bool,
+	require_separate_transfer_queue:  bool,
+	require_separate_compute_queue:   bool,
+	required_mem_size:                vk.DeviceSize,
+	required_extensions:              [dynamic]string,
+	required_version:                 u32,
+	required_features:                vk.PhysicalDeviceFeatures,
+	required_features2:               vk.PhysicalDeviceFeatures2,
+	extended_features_chain:          [dynamic]Generic_Feature,
+	defer_surface_initialization:     bool,
+	use_first_gpu_unconditionally:    bool,
+	enable_portability_subset:        bool,
 }
 
 Physical_Device_Selector :: struct {
 	// Instance info
-	instance:                  struct {
-		handle:                  vk.Instance,
-		surface:                 vk.SurfaceKHR,
-		version:                 u32,
-		headless:                bool,
-		properties2_ext_enabled: bool,
-	},
+	vk_instance:             vk.Instance,
+	instance_version:        u32,
+	headless:                bool,
+	properties2_ext_enabled: bool,
+	surface:                 vk.SurfaceKHR,
 
 	// Selection criteria
-	criteria:                  struct {
-		name:                             string,
-		preferred_type:                   Preferred_Device_Type,
-		allow_any_type:                   bool,
-		require_present:                  bool,
-		require_dedicated_transfer_queue: bool,
-		require_dedicated_compute_queue:  bool,
-		require_separate_transfer_queue:  bool,
-		require_separate_compute_queue:   bool,
-		required_mem_size:                vk.DeviceSize,
-		required_extensions:              [dynamic]string,
-		required_version:                 u32,
-		required_features:                vk.PhysicalDeviceFeatures,
-		required_features2:               vk.PhysicalDeviceFeatures2,
-		extended_features_chain:          [dynamic]Generic_Feature,
-		defer_surface_initialization:     bool,
-		use_first_gpu_unconditionally:    bool,
-		enable_portability_subset:        bool,
-	},
-
-	// Unsuitability reasons
-	unsuitability_reasons:     [dynamic]string,
-	unsuitability_arena:       mem.Arena,
-	unsuitability_arena_buf:   []byte,
+	criteria:                Physical_Device_Selector_Criteria,
+	unsuitability:           [dynamic]string,
 
 	// Internal
-	allocator:                 runtime.Allocator,
+	allocator:               runtime.Allocator,
+	arena_buf:               []byte,
+	arena:                   mem.Arena,
+	initialized:             bool,
 }
 
-physical_device_selector_default :: proc(
+physical_device_selector_init_default :: proc(
 	self: ^Physical_Device_Selector,
-	instance: ^Instance,
-	surface: vk.SurfaceKHR,
+	instance: Instance,
 	allocator := context.allocator,
+	loc := #caller_location,
 ) {
+	assert(self != nil, "Invalid physical device selector", loc)
+	assert(self.initialized == false, "Physical device selector already initialized", loc)
+
+	// Internal
+	self.allocator = allocator
+	self.arena_buf = make([]byte, 512 * mem.Kilobyte, self.allocator)
+	mem.arena_init(&self.arena, self.arena_buf)
+
 	// Instance information
-	self.instance = {
-		handle                  = instance.instance,
-		surface                 = surface,
-		version                 = instance.instance_version,
-		headless                = instance.headless,
-		properties2_ext_enabled = instance.properties2_ext_enabled,
-	}
+	self.vk_instance = instance.vk_instance
+	self.instance_version = instance.instance_version
+	self.headless = instance.headless
+	self.properties2_ext_enabled = instance.properties2_ext_enabled
 
 	// Physical device criteria
 	self.criteria = {
@@ -1238,50 +1267,48 @@ physical_device_selector_default :: proc(
 		enable_portability_subset = true,
 	}
 
-	// Internal
-	self.allocator = allocator
-
 	// Physical device criteria (set allocator's)
-	self.criteria.required_extensions.allocator = allocator
-	self.criteria.extended_features_chain.allocator = allocator
+	self.criteria.required_extensions = make([dynamic]string, 0, 16, self.allocator)
+	self.criteria.extended_features_chain = make([dynamic]Generic_Feature, 0, 16, self.allocator)
+	self.unsuitability = make([dynamic]string, 0, 16, self.allocator)
+
+	self.initialized = true
 }
 
-// Requires a `vkb.Instance` to construct, needed to pass instance creation info.
-create_physical_device_selector_default :: proc(
-	instance: ^Instance,
-	allocator := context.allocator,
-) -> ^Physical_Device_Selector {
-	out := new(Physical_Device_Selector, allocator)
-	physical_device_selector_default(out, instance, 0, allocator)
-	out.unsuitability_arena_buf = make([]byte, 64 * mem.Kilobyte, allocator)
-	mem.arena_init(&out.unsuitability_arena, out.unsuitability_arena_buf)
-	return out
-}
-
-// Requires a `vkb.Instance` to construct, needed to pass instance creation info,
-// optionally specify the surface here.
-create_physical_device_selector_with_surface :: proc(
-	instance: ^Instance,
+// Initialize a `vkb.Physical_Device_Selector`, needed to pass instance creation
+// info, optionally specify the surface here.
+physical_device_selector_init_with_surface :: proc(
+	self: ^Physical_Device_Selector,
+	instance: Instance,
 	surface: vk.SurfaceKHR,
 	allocator := context.allocator,
-) -> ^Physical_Device_Selector {
-	out := new(Physical_Device_Selector, allocator)
-	physical_device_selector_default(out, instance, surface, allocator)
-	return out
+	loc := #caller_location,
+) {
+	assert(self != nil, "Invalid physical device selector", loc)
+	physical_device_selector_init_default(self, instance, allocator, loc)
+	self.surface = surface
 }
 
-// Requires a `vkb.Instance` to construct, needed to pass instance creation info.
-create_physical_device_selector :: proc {
-	create_physical_device_selector_default,
-	create_physical_device_selector_with_surface,
+// Initialize a `vkb.Physical_Device_Selector` to construct, needed to pass
+// instance creation info.
+physical_device_selector_init :: proc {
+	physical_device_selector_init_default,
+	physical_device_selector_init_with_surface,
 }
 
-destroy_physical_device_selector :: proc(self: ^Physical_Device_Selector) {
+physical_device_selector_uninit :: proc(
+	self: ^Physical_Device_Selector, loc := #caller_location,
+) {
+	assert(self != nil, "Invalid physical device selector", loc)
+	assert(self.initialized, "Physical device selector is not initialized", loc)
+
 	context.allocator = self.allocator
-	delete(self.unsuitability_arena_buf)
-	delete(self.criteria.required_extensions)
+	delete(self.unsuitability)
 	delete(self.criteria.extended_features_chain)
-	free(self)
+	delete(self.criteria.required_extensions)
+	delete(self.arena_buf, self.allocator)
+
+	self.initialized = false
 }
 
 // Return all devices which are considered suitable - intended for applications
@@ -1294,13 +1321,14 @@ physical_device_selector_select_devices :: proc(
 	allocator := context.allocator,
 	loc := #caller_location,
 ) -> (
-	devices: []^Physical_Device,
+	devices: []Physical_Device,
 	err: Error,
 ) {
 	if self.criteria.require_present && !self.criteria.defer_surface_initialization {
-		if self.instance.surface == 0 {
+		if self.surface == 0 {
 			err = Physical_Device_Error {
-				.No_Surface_Provided, .ERROR_INITIALIZATION_FAILED, "Present is required, but no surface is provided", {},
+				.No_Surface_Provided, .ERROR_INITIALIZATION_FAILED,
+				"Present is required, but no surface is provided", {},
 			}
 			return
 		}
@@ -1312,47 +1340,50 @@ physical_device_selector_select_devices :: proc(
 	// Get the vk.PhysicalDevice handles on the system
 	physical_device_count: u32
 	vk_check(vk.EnumeratePhysicalDevices(
-		self.instance.handle, &physical_device_count, nil,
+		self.vk_instance, &physical_device_count, nil,
 	), "Failed to enumerate physical devices count", loc) or_return
 
 	vk_physical_devices := make([]vk.PhysicalDevice, physical_device_count, ta)
 	vk_check(vk.EnumeratePhysicalDevices(
-		self.instance.handle, &physical_device_count, raw_data(vk_physical_devices),
+		self.vk_instance, &physical_device_count, raw_data(vk_physical_devices),
 	), "Failed to enumerate physical devices", loc) or_return
 
 	// Handle first GPU selection separately
 	// if this option is set, always return only the first physical device found
 	if self.criteria.use_first_gpu_unconditionally && len(vk_physical_devices) > 0 {
-		devices = make([]^Physical_Device, 1, allocator)
+		devices = make([]Physical_Device, 1, allocator)
+		physical_device := &devices[0]
 
-		physical_device := physical_device_selector_populate_device_details(
+		physical_device_selector_populate_device_details(
 			self,
 			vk_physical_devices[0],
 			self.criteria.extended_features_chain[:],
+			physical_device,
 			allocator,
 			loc,
 		) or_return
 
 		physical_device_selector_fill_criteria(self, physical_device)
 
-		devices[0] = physical_device
-
 		return
 	}
 
-	suitable := make([dynamic]^Physical_Device, ta)
-	partial := make([dynamic]^Physical_Device, ta)
+	suitable := make([dynamic]Physical_Device, ta)
+	partial := make([dynamic]Physical_Device, ta)
 
 	for vk_physical_device in vk_physical_devices {
-		physical_device := physical_device_selector_populate_device_details(
+		physical_device: Physical_Device
+		physical_device_selector_populate_device_details(
 			self,
 			vk_physical_device,
 			self.criteria.extended_features_chain[:],
+			&physical_device,
 			allocator,
 			loc,
 		) or_return
 
-		physical_device.suitable = physical_device_selector_is_device_suitable(self, physical_device)
+		physical_device.suitable =
+			physical_device_selector_is_device_suitable(self, &physical_device)
 
 		switch physical_device.suitable {
 		case .Yes:
@@ -1360,7 +1391,7 @@ physical_device_selector_select_devices :: proc(
 		case .Partial:
 			append(&partial, physical_device)
 		case .No:
-			destroy_physical_device(physical_device)
+			destroy_physical_device(&physical_device)
 		}
 	}
 
@@ -1373,12 +1404,12 @@ physical_device_selector_select_devices :: proc(
 			kind = .No_Suitable_Device,
 			result = .ERROR_INITIALIZATION_FAILED,
 			message = "No suitable device found",
-			unsuitability_reasons = self.unsuitability_reasons[:],
+			unsuitability_reasons = self.unsuitability[:],
 		}
 		return
 	}
 
-	out := make([dynamic]^Physical_Device, allocator)
+	out := make([dynamic]Physical_Device, allocator)
 	reserve(&out, total_suitable + total_partial)
 
 	// Add suitable devices first, then partial
@@ -1387,7 +1418,7 @@ physical_device_selector_select_devices :: proc(
 
 	// Make the physical device ready to be used to create a Device from it
 	for &pd in out {
-		physical_device_selector_fill_criteria(self, pd)
+		physical_device_selector_fill_criteria(self, &pd)
 	}
 
 	return out[:], nil
@@ -1395,21 +1426,24 @@ physical_device_selector_select_devices :: proc(
 
 physical_device_selector_select :: proc(
 	self: ^Physical_Device_Selector,
-	allocator := context.allocator,
-) -> (
 	physical_device: ^Physical_Device,
+	allocator := context.allocator,
+	loc := #caller_location,
+) -> (
 	err: Error,
 ) {
+	assert(physical_device != nil, "Invalid physical device", loc)
+
 	selected_devices := physical_device_selector_select_devices(self, allocator) or_return
 	defer delete(selected_devices, allocator)
 
 	total_devices := len(selected_devices)
-	physical_device = selected_devices[0]
+	physical_device^ = selected_devices[0]
 
 	// Destroy the remaining physical devices...
 	if total_devices > 1 {
 		for i in 1 ..< total_devices {
-			destroy_physical_device(selected_devices[i])
+			destroy_physical_device(&selected_devices[i])
 		}
 	}
 
@@ -1435,7 +1469,7 @@ physical_device_selector_select_device_names :: proc(
 	names = make([]string, len(selected_devices), allocator)
 	for &pd, i in selected_devices {
 		names[i] = strings.clone(pd.name, allocator)
-		destroy_physical_device(pd)
+		destroy_physical_device(&pd)
 	}
 
 	return
@@ -1444,16 +1478,15 @@ physical_device_selector_select_device_names :: proc(
 // Set the surface in which the physical device should render to.
 //
 // Be sure to set it if swapchain functionality is to be used.
-physical_device_selector_set_surface :: proc(self: ^Physical_Device_Selector, surface: vk.SurfaceKHR) {
-	self.instance.surface = surface
+physical_device_selector_set_surface :: proc(
+	self: ^Physical_Device_Selector, surface: vk.SurfaceKHR,
+) {
+	self.surface = surface
 }
 
 // Set the name of the device to select.
 physical_device_selector_set_name :: proc(self: ^Physical_Device_Selector, name: string) {
 	if len(name) > 0 {
-		if len(self.criteria.name) > 0 {
-			delete(self.criteria.name, self.allocator)
-		}
 		self.criteria.name = strings.clone(name, self.allocator)
 	}
 }
@@ -1648,77 +1681,77 @@ physical_device_selector_select_first_device_unconditionally :: proc(
 @(private)
 physical_device_selector_populate_device_details :: proc(
 	self: ^Physical_Device_Selector,
-	vk_phys_device: vk.PhysicalDevice,
+	vk_physical_device: vk.PhysicalDevice,
 	features_chain: []Generic_Feature,
+	out: ^Physical_Device,
 	allocator: runtime.Allocator,
 	loc := #caller_location,
 ) -> (
-	pd: ^Physical_Device,
 	err: Error,
 ) {
-	pd = create_physical_device(self, vk_phys_device, allocator, loc)
-	defer if err != nil { destroy_physical_device(pd) }
+	assert(out != nil, "Invalid physical device", loc)
 
-	pd_allocator := mem.arena_allocator(&pd.arena)
+	physical_device_init(out, vk_physical_device, self, allocator, loc)
+	buf_allocator := mem.arena_allocator(&out.arena)
 
 	ta := context.temp_allocator
 	runtime.DEFAULT_TEMP_ALLOCATOR_TEMP_GUARD(ignore = allocator == ta)
 
 	// Get device properties
-	vk.GetPhysicalDeviceProperties(vk_phys_device, &pd.properties)
+	vk.GetPhysicalDeviceProperties(vk_physical_device, &out.vk_properties)
 
 	// Set device name
-	pd.name = strings.clone_from(byte_arr_str(&pd.properties.deviceName), pd_allocator)
+	out.name = strings.clone_from(byte_arr_str(&out.vk_properties.deviceName), buf_allocator)
 
 	// Get the device queue families
 	queue_family_count: u32
-	vk.GetPhysicalDeviceQueueFamilyProperties(vk_phys_device, &queue_family_count, nil)
+	vk.GetPhysicalDeviceQueueFamilyProperties(vk_physical_device, &queue_family_count, nil)
 
-	pd.queue_families = make([]vk.QueueFamilyProperties, int(queue_family_count), pd_allocator)
+	out.vk_queue_families = make([]vk.QueueFamilyProperties, int(queue_family_count), allocator)
 	vk.GetPhysicalDeviceQueueFamilyProperties(
-		vk_phys_device,
+		vk_physical_device,
 		&queue_family_count,
-		raw_data(pd.queue_families),
+		raw_data(out.vk_queue_families),
 	)
 
 	// Get device features and memory properties
-	vk.GetPhysicalDeviceFeatures(vk_phys_device, &pd.features)
-	vk.GetPhysicalDeviceMemoryProperties(vk_phys_device, &pd.memory_properties)
+	vk.GetPhysicalDeviceFeatures(vk_physical_device, &out.vk_features)
+	vk.GetPhysicalDeviceMemoryProperties(vk_physical_device, &out.vk_memory_properties)
 
 	// Get supported device extensions
 	property_count: u32
 	vk_check(vk.EnumerateDeviceExtensionProperties(
-		vk_phys_device, nil, &property_count, nil,
+		vk_physical_device, nil, &property_count, nil,
 	), "Failed to enumerate device extensions properties count", loc) or_return
 
 	available_extensions := make([]vk.ExtensionProperties, property_count, ta)
 	vk_check(vk.EnumerateDeviceExtensionProperties(
-		vk_phys_device, nil, &property_count, raw_data(available_extensions),
+		vk_physical_device, nil, &property_count, raw_data(available_extensions),
 	), "Failed to enumerate device extensions properties", loc) or_return
 
-	pd.available_extensions = make([]string, property_count, pd_allocator)
+	out.available_extensions = make([]string, property_count, allocator)
 	for &ext, i in available_extensions {
 		ext_name := byte_arr_str(&ext.extensionName)
-		pd.available_extensions[i] = strings.clone(ext_name, pd_allocator)
+		out.available_extensions[i] = strings.clone(ext_name, buf_allocator)
 	}
 
 	// We use binary search later to optimize the query, this requires data to be sorted
-	slice.sort(pd.available_extensions)
+	slice.sort(out.available_extensions)
 
 	// Same value as the non-KHR version
-	pd.features2.sType = .PHYSICAL_DEVICE_FEATURES_2
-	pd.properties2_ext_enabled = self.instance.properties2_ext_enabled
+	out.vk_features2.sType = .PHYSICAL_DEVICE_FEATURES_2
+	out.properties2_ext_enabled = self.properties2_ext_enabled
 
-	instance_is_1_1 := self.instance.version >= vk.API_VERSION_1_1
-	if len(features_chain) > 0 && (instance_is_1_1 || self.instance.properties2_ext_enabled) {
+	instance_is_1_1 := self.instance_version >= vk.API_VERSION_1_1
+	if len(features_chain) > 0 && (instance_is_1_1 || self.properties2_ext_enabled) {
 		// Setup the pNext chain
 		local_features := generic_features_setup_pnext_chain(features_chain)
 
 		// Query the features
 		if (instance_is_1_1) {
-			vk.GetPhysicalDeviceFeatures2(vk_phys_device, &local_features)
+			vk.GetPhysicalDeviceFeatures2(vk_physical_device, &local_features)
 		} else {
-			vk.GetPhysicalDeviceFeatures2KHR(vk_phys_device, &local_features)
+			vk.GetPhysicalDeviceFeatures2KHR(vk_physical_device, &local_features)
 		}
 
 		// The results are now in the features_chain, we can now compare
@@ -1733,7 +1766,7 @@ physical_device_selector_fill_criteria :: proc(
 	self: ^Physical_Device_Selector,
 	physical_device: ^Physical_Device,
 ) {
-	physical_device.features = self.criteria.required_features
+	physical_device.vk_features = self.criteria.required_features
 
 	reserve(&physical_device.extended_features_chain, len(self.criteria.extended_features_chain))
 	append(&physical_device.extended_features_chain, ..self.criteria.extended_features_chain[:])
@@ -1775,81 +1808,80 @@ physical_device_selector_is_device_suitable :: proc(
 	suitable = .Yes
 
 	ta := context.temp_allocator
-	runtime.DEFAULT_TEMP_ALLOCATOR_TEMP_GUARD(ignore = self.allocator == context.temp_allocator)
+	runtime.DEFAULT_TEMP_ALLOCATOR_TEMP_GUARD(ignore = self.allocator == ta)
 
-	mem.arena_free_all(&self.unsuitability_arena)
-	reasons_alloc := mem.arena_allocator(&self.unsuitability_arena)
+	buf_allocator := mem.arena_allocator(&self.arena)
 
 	// Check if physical device name match criteria
 	if len(self.criteria.name) > 0 && self.criteria.name != pd.name {
-		append(&self.unsuitability_reasons,
+		append(&self.unsuitability,
 			fmt.aprintf("Device name [%s] doesn't match requested name [%s]",
 				pd.name,
 				self.criteria.name,
-				allocator = reasons_alloc))
+				allocator = buf_allocator))
 		return .No
 	}
 
-	if self.criteria.required_version > pd.properties.apiVersion {
-		supported_major := VK_VERSION_MAJOR(pd.properties.apiVersion)
-		supported_minor := VK_VERSION_MINOR(pd.properties.apiVersion)
+	if self.criteria.required_version > pd.vk_properties.apiVersion {
+		supported_major := VK_VERSION_MAJOR(pd.vk_properties.apiVersion)
+		supported_minor := VK_VERSION_MINOR(pd.vk_properties.apiVersion)
 
 		required_major := VK_VERSION_MAJOR(self.criteria.required_version)
 		required_minor := VK_VERSION_MINOR(self.criteria.required_version)
 
-		append(&self.unsuitability_reasons,
+		append(&self.unsuitability,
 			fmt.aprintf("API version [%d.%d] is lower than required version [%d.%d]",
 				supported_major,
 				supported_minor,
 				required_major,
 				required_minor,
-				allocator = reasons_alloc))
+				allocator = buf_allocator))
 
 		return .No
 	}
 
 	dedicated_compute :=
 		get_dedicated_queue_index(
-			pd.queue_families, {.COMPUTE}, {.TRANSFER}) != vk.QUEUE_FAMILY_IGNORED
+			pd.vk_queue_families, {.COMPUTE}, {.TRANSFER}) != vk.QUEUE_FAMILY_IGNORED
 
 	dedicated_transfer :=
 		get_dedicated_queue_index(
-			pd.queue_families, {.TRANSFER}, {.COMPUTE}) != vk.QUEUE_FAMILY_IGNORED
+			pd.vk_queue_families, {.TRANSFER}, {.COMPUTE}) != vk.QUEUE_FAMILY_IGNORED
 
 	separate_compute :=
 		get_separate_queue_index(
-			pd.queue_families, {.COMPUTE}, {.TRANSFER}) != vk.QUEUE_FAMILY_IGNORED
+			pd.vk_queue_families, {.COMPUTE}, {.TRANSFER}) != vk.QUEUE_FAMILY_IGNORED
 
 	separate_transfer :=
 		get_separate_queue_index(
-			pd.queue_families, {.TRANSFER}, {.COMPUTE}) != vk.QUEUE_FAMILY_IGNORED
+			pd.vk_queue_families, {.TRANSFER}, {.COMPUTE}) != vk.QUEUE_FAMILY_IGNORED
 
 	present_queue :=
 		get_present_queue_index(
-			pd.queue_families, pd.physical_device, self.instance.surface) != vk.QUEUE_FAMILY_IGNORED
+			pd.vk_queue_families, pd.vk_physical_device, self.surface) != vk.QUEUE_FAMILY_IGNORED
 
 	if self.criteria.require_dedicated_compute_queue && !dedicated_compute {
-		append(&self.unsuitability_reasons, "No dedicated compute queue")
+		append(&self.unsuitability, "No dedicated compute queue")
 		return .No
 	}
 
 	if self.criteria.require_dedicated_transfer_queue && !dedicated_transfer {
-		append(&self.unsuitability_reasons, "No dedicated transfer queue")
+		append(&self.unsuitability, "No dedicated transfer queue")
 		return .No
 	}
 
 	if self.criteria.require_separate_compute_queue && !separate_compute {
-		append(&self.unsuitability_reasons, "No separate compute queue")
+		append(&self.unsuitability, "No separate compute queue")
 		return .No
 	}
 
 	if self.criteria.require_separate_transfer_queue && !separate_transfer {
-		append(&self.unsuitability_reasons, "No separate transfer queue")
+		append(&self.unsuitability, "No separate transfer queue")
 		return .No
 	}
 
 	if self.criteria.require_present && !present_queue && !self.criteria.defer_surface_initialization {
-		append(&self.unsuitability_reasons, "No queue capable of present operations")
+		append(&self.unsuitability, "No queue capable of present operations")
 		return .No
 	}
 
@@ -1861,10 +1893,10 @@ physical_device_selector_is_device_suitable :: proc(
 
 	if len(unsupported_extensions) > 0 {
 		for unsupported_ext in unsupported_extensions {
-			append(&self.unsuitability_reasons,
+			append(&self.unsuitability,
 				fmt.aprintf("Device extension [%s] not supported",
 					unsupported_ext,
-					allocator = reasons_alloc))
+					allocator = buf_allocator))
 		}
 		return .No
 	}
@@ -1873,51 +1905,51 @@ physical_device_selector_is_device_suitable :: proc(
 		// Supported formats
 		format_count: u32
 		if res := vk.GetPhysicalDeviceSurfaceFormatsKHR(
-			pd.physical_device,
-			self.instance.surface,
+			pd.vk_physical_device,
+			self.surface,
 			&format_count,
 			nil,
 		); res != .SUCCESS {
-			append(&self.unsuitability_reasons,
+			append(&self.unsuitability,
 				fmt.aprintf("vk.GetPhysicalDeviceSurfaceFormatsKHR returned error code [%s]",
 					res,
-					allocator = reasons_alloc))
+					allocator = buf_allocator))
 			return .No
 		}
 
 		// Supported present modes
 		present_mode_count: u32
 		if res := vk.GetPhysicalDeviceSurfacePresentModesKHR(
-			pd.physical_device,
-			self.instance.surface,
+			pd.vk_physical_device,
+			self.surface,
 			&present_mode_count,
 			nil,
 		); res != .SUCCESS {
-			append(&self.unsuitability_reasons,
+			append(&self.unsuitability,
 				fmt.aprintf("vk.GetPhysicalDeviceSurfacePresentModesKHR returned error code [%s]",
 					res,
-					allocator = reasons_alloc))
+					allocator = buf_allocator))
 			return .No
 		}
 	}
 
 	preferred_type := cast(vk.PhysicalDeviceType)self.criteria.preferred_type
-	if pd.properties.deviceType != preferred_type {
+	if pd.vk_properties.deviceType != preferred_type {
 		if self.criteria.allow_any_type {
 			suitable = .Partial
 		} else {
-			append(&self.unsuitability_reasons,
+			append(&self.unsuitability,
 				fmt.aprintf("Device type [%v] is not of preferred type [%s]",
-					pd.properties.deviceType,
+					pd.vk_properties.deviceType,
 					preferred_type,
-					allocator = reasons_alloc))
+					allocator = buf_allocator))
 			return .No
 		}
 	}
 
 	unsupported_features := find_unsupported_features_in_list(
 		self.criteria.required_features,
-		pd.features,
+		pd.vk_features,
 		self.criteria.extended_features_chain[:],
 		pd.extended_features_chain[:],
 		ta,
@@ -1925,19 +1957,19 @@ physical_device_selector_is_device_suitable :: proc(
 
 	if len(unsupported_features) > 0 {
 		for unsupported_feat in unsupported_features {
-			append(&self.unsuitability_reasons,
+			append(&self.unsuitability,
 				fmt.aprintf("Device feature [%s] not supported",
 					unsupported_feat,
-					allocator = reasons_alloc))
+					allocator = buf_allocator))
 		}
 		return .No
 	}
 
 	// Check required memory size
-	for i: u32 = 0; i < pd.memory_properties.memoryHeapCount; i += 1 {
-		if .DEVICE_LOCAL in pd.memory_properties.memoryHeaps[i].flags {
-			if pd.memory_properties.memoryHeaps[i].size < self.criteria.required_mem_size {
-				append(&self.unsuitability_reasons,
+	for i: u32 = 0; i < pd.vk_memory_properties.memoryHeapCount; i += 1 {
+		if .DEVICE_LOCAL in pd.vk_memory_properties.memoryHeaps[i].flags {
+			if pd.vk_memory_properties.memoryHeaps[i].size < self.criteria.required_mem_size {
+				append(&self.unsuitability,
 					"Did not contain a Device Local memory heap with enough size")
 				return .No
 			}
@@ -1960,19 +1992,19 @@ Physical_Device_Suitable :: enum {
 Physical_Device :: struct {
 	// Properties
 	name:                         string,
-	physical_device:              vk.PhysicalDevice,
-	surface:                      vk.SurfaceKHR,
-	features:                     vk.PhysicalDeviceFeatures,
-	properties:                   vk.PhysicalDeviceProperties,
-	memory_properties:            vk.PhysicalDeviceMemoryProperties,
+	vk_physical_device:           vk.PhysicalDevice,
+	vk_surface:                   vk.SurfaceKHR,
+	vk_features:                  vk.PhysicalDeviceFeatures,
+	vk_properties:                vk.PhysicalDeviceProperties,
+	vk_memory_properties:         vk.PhysicalDeviceMemoryProperties,
 
-	// For use when build the Device
+	// For use when building the Device
 	instance_version:             u32,
 	extensions_to_enable:         [dynamic]string,
 	available_extensions:         []string,
-	queue_families:               []vk.QueueFamilyProperties,
+	vk_queue_families:            []vk.QueueFamilyProperties,
 	extended_features_chain:      [dynamic]Generic_Feature,
-	features2:                    vk.PhysicalDeviceFeatures2,
+	vk_features2:                 vk.PhysicalDeviceFeatures2,
 	defer_surface_initialization: bool,
 	properties2_ext_enabled:      bool,
 	suitable:                     Physical_Device_Suitable,
@@ -1981,73 +2013,82 @@ Physical_Device :: struct {
 	allocator:                    runtime.Allocator,
 	arena_buf:                    []byte,
 	arena:                        mem.Arena,
+	initialized:                  bool,
 }
 
 @(private)
-create_physical_device :: proc(
+physical_device_init :: proc(
+	self: ^Physical_Device,
+	vk_physical_device: vk.PhysicalDevice,
 	selector: ^Physical_Device_Selector,
-	vk_phys_device: vk.PhysicalDevice,
 	allocator: runtime.Allocator,
 	loc := #caller_location,
-) -> (
-	pd: ^Physical_Device,
 ) {
-	pd = new_clone(Physical_Device{
-		physical_device              = vk_phys_device,
-		surface                      = selector.instance.surface,
+	assert(self != nil, "Invalid physical device", loc)
+
+	self^ = {
+		vk_physical_device           = vk_physical_device,
+		vk_surface                   = selector.surface,
 		defer_surface_initialization = selector.criteria.defer_surface_initialization,
-		instance_version             = selector.instance.version,
+		instance_version             = selector.instance_version,
 		allocator                    = allocator,
-	}, allocator)
-	assert(pd != nil, "Failed to allocate a Physical Device object")
+	}
 
-	// Initialize an arena allocator primarily to clone the device extensions strings
-	// Typical devices commonly expose 200-350 extensions
-	pd.arena_buf = make([]byte, 64 * mem.Kilobyte, allocator)
-	mem.arena_init(&pd.arena, pd.arena_buf)
+	// Initialize an arena allocator with more space to clone the device
+	// extensions strings. Typical devices commonly expose 200-350 extensions
+	self.arena_buf = make([]byte, 1 * mem.Megabyte, self.allocator)
+	mem.arena_init(&self.arena, self.arena_buf)
 
-	pd.extensions_to_enable.allocator = allocator
-	pd.extended_features_chain.allocator = allocator
+	self.extensions_to_enable = make([dynamic]string, 0, 16, self.allocator)
+	self.extended_features_chain = make([dynamic]Generic_Feature, 0, 16, self.allocator)
+
+	self.initialized = true
 
 	return
 }
 
 destroy_physical_device :: proc(self: ^Physical_Device, loc := #caller_location) {
-	assert(self != nil && self.physical_device != nil, "Invalid Physical Device", loc)
+	assert(self != nil, "Invalid physical device", loc)
+	assert(self.initialized, "Physical device not initialized", loc)
+	assert(self.vk_physical_device != nil, "Invalid vk.PhysicalDevice", loc)
+
 	context.allocator = self.allocator
-	delete(self.arena_buf)
-	delete(self.extensions_to_enable)
 	delete(self.extended_features_chain)
-	free(self)
+	delete(self.extensions_to_enable)
+	delete(self.available_extensions)
+	delete(self.vk_queue_families)
+	delete(self.arena_buf)
+
+	self.initialized = false
 }
 
 // Has a queue family that supports compute operations but not graphics nor transfer.
 physical_device_has_dedicated_compute_queue :: proc(self: ^Physical_Device) -> bool {
 	return get_dedicated_queue_index(
-		self.queue_families, { .COMPUTE }, { .TRANSFER }) != vk.QUEUE_FAMILY_IGNORED
+		self.vk_queue_families, { .COMPUTE }, { .TRANSFER }) != vk.QUEUE_FAMILY_IGNORED
 }
 
-// Has a queue family that supports transfer operations but not graphics.
+// Has a queue family that supports compute operations but not graphics.
 physical_device_has_separate_compute_queue :: proc(self: ^Physical_Device) -> bool {
 	return get_separate_queue_index(
-		self.queue_families, { .COMPUTE }, { .TRANSFER }) != vk.QUEUE_FAMILY_IGNORED
+		self.vk_queue_families, { .COMPUTE }, { .TRANSFER }) != vk.QUEUE_FAMILY_IGNORED
 }
 
 // Has a queue family that supports transfer operations but not graphics nor compute.
 physical_device_has_dedicated_transfer_queue :: proc(self: ^Physical_Device) -> bool {
 	return get_dedicated_queue_index(
-		self.queue_families, { .TRANSFER }, { .COMPUTE }) != vk.QUEUE_FAMILY_IGNORED
+		self.vk_queue_families, { .TRANSFER }, { .COMPUTE }) != vk.QUEUE_FAMILY_IGNORED
 }
 
 // Has a queue family that supports transfer operations but not graphics.
 physical_device_has_separate_transfer_queue :: proc(self: ^Physical_Device) -> bool {
 	return get_separate_queue_index(
-		self.queue_families, { .TRANSFER }, { .COMPUTE }) != vk.QUEUE_FAMILY_IGNORED
+		self.vk_queue_families, { .TRANSFER }, { .COMPUTE }) != vk.QUEUE_FAMILY_IGNORED
 }
 
 // Advanced: Get the `vk.QueueFamilyProperties` of the device if special queue setup is needed.
 physical_device_get_queue_families :: proc(self: ^Physical_Device) -> []vk.QueueFamilyProperties {
-	return self.queue_families
+	return self.vk_queue_families
 }
 
 // Find a queue family that supports the required flags, preferring dedicated queues.
@@ -2064,7 +2105,7 @@ physical_device_find_queue_family_index :: proc(
 		avoid: vk.QueueFlags,
 	) -> u32 {
 		for &prop, i in props {
-			is_suitable := (prop.queueFlags >= require)
+			is_suitable := (prop.queueFlags & require) == require
 			is_dedicated := (prop.queueFlags & avoid) == {}
 
 			if prop.queueCount > 0 && is_suitable && is_dedicated {
@@ -2077,7 +2118,7 @@ physical_device_find_queue_family_index :: proc(
 	// Try to find dedicated compute queue (no graphics)
 	if .COMPUTE in flags {
 		q := find_dedicated_queue_family_index(
-			self.queue_families,
+			self.vk_queue_families,
 			flags,
 			{.GRAPHICS},
 		)
@@ -2089,7 +2130,7 @@ physical_device_find_queue_family_index :: proc(
 	// Try to find dedicated transfer queue (no graphics)
 	if .TRANSFER in flags {
 		q := find_dedicated_queue_family_index(
-			self.queue_families,
+			self.vk_queue_families,
 			flags,
 			{.GRAPHICS},
 		)
@@ -2099,7 +2140,7 @@ physical_device_find_queue_family_index :: proc(
 	}
 
 	// Fall back to any suitable queue (no avoidance)
-	return find_dedicated_queue_family_index(self.queue_families, flags, {})
+	return find_dedicated_queue_family_index(self.vk_queue_families, flags, {})
 }
 
 // Query the list of extensions which should be enabled.
@@ -2162,13 +2203,13 @@ physical_device_get_supported_features :: proc(
 	features2: ^vk.PhysicalDeviceFeatures2,
 ) {
 	instance_is_1_1 := self.instance_version >= vk.API_VERSION_1_1
-	if !(instance_is_1_1 || !self.properties2_ext_enabled) {
+	if !(instance_is_1_1 || self.properties2_ext_enabled) {
 		return
 	}
 	if (instance_is_1_1) {
-		vk.GetPhysicalDeviceFeatures2(self.physical_device, features2)
+		vk.GetPhysicalDeviceFeatures2(self.vk_physical_device, features2)
 	} else {
-		vk.GetPhysicalDeviceFeatures2KHR(self.physical_device, features2)
+		vk.GetPhysicalDeviceFeatures2KHR(self.vk_physical_device, features2)
 	}
 }
 
@@ -2182,10 +2223,10 @@ physical_device_enable_features_if_present :: proc(
 ) -> (
 	ok: bool,
 ) {
-	actual_pdf: vk.PhysicalDeviceFeatures
-	vk.GetPhysicalDeviceFeatures(self.physical_device, &actual_pdf)
-	if ok = check_features_10(features_to_enable, actual_pdf); ok {
-		merge_features(&self.features, features_to_enable)
+	actual_pd_features: vk.PhysicalDeviceFeatures
+	vk.GetPhysicalDeviceFeatures(self.vk_physical_device, &actual_pd_features)
+	if ok = check_features_10(features_to_enable, actual_pd_features); ok {
+		merge_features(&self.vk_features, features_to_enable)
 	}
 	return
 }
@@ -2214,15 +2255,15 @@ physical_device_enable_extension_features_if_present :: proc(
 	}
 
 	instance_is_1_1 := self.instance_version >= vk.API_VERSION_1_1
-	if !(instance_is_1_1 || !self.properties2_ext_enabled) {
+	if !(instance_is_1_1 || self.properties2_ext_enabled) {
 		return false
 	}
 
 	// Query supported features
 	if instance_is_1_1 {
-		vk.GetPhysicalDeviceFeatures2(self.physical_device, &local_features)
+		vk.GetPhysicalDeviceFeatures2(self.vk_physical_device, &local_features)
 	} else {
-		vk.GetPhysicalDeviceFeatures2KHR(self.physical_device, &local_features)
+		vk.GetPhysicalDeviceFeatures2KHR(self.vk_physical_device, &local_features)
 	}
 
 	supported_generic := create_generic_features(&query_features, loc)
@@ -2244,10 +2285,10 @@ physical_device_enable_extension_features_if_present :: proc(
 }
 
 // Generic version that works with any feature struct
-physical_device_enable_extensions_with_features :: proc(
+physical_device_enable_extensions_features_if_present :: proc(
 	self: ^Physical_Device,
 	extensions: []string,
-	features: []$T,
+	features: $T,
 	loc := #caller_location,
 ) -> (
 	ok: bool,
@@ -2259,15 +2300,13 @@ physical_device_enable_extensions_with_features :: proc(
 		}
 	}
 
-	// Enable all features
-	for feature in features {
-		if !physical_device_enable_extension_features_if_present(self, feature, loc) {
-			return false
-		}
-	}
-
 	// Enable extensions
 	append(&self.extensions_to_enable, ..extensions[:])
+
+	// Enable features
+	if !physical_device_enable_extension_features_if_present(self, features, loc) {
+		return false
+	}
 
 	return true
 }
@@ -2283,63 +2322,63 @@ Custom_Queue_Description :: struct {
 }
 
 Device_Builder :: struct {
-	// Physical device
-	physical_device:      ^Physical_Device,
-
 	// Info
-	flags:                vk.DeviceCreateFlags,
-	pnext_chain:          [dynamic]^vk.BaseOutStructure,
-	queue_descriptions:   [dynamic]Custom_Queue_Description,
-	allocation_callbacks: ^vk.AllocationCallbacks,
+	vk_flags:                vk.DeviceCreateFlags,
+	vk_pnext_chain:          [dynamic]^vk.BaseOutStructure,
+	queue_descriptions:      [dynamic]Custom_Queue_Description,
+	vk_allocation_callbacks: ^vk.AllocationCallbacks,
 
 	// Internal
-	allocator:            mem.Allocator,
+	allocator:               mem.Allocator,
+	initialized:             bool,
 }
 
-@(require_results)
-create_device_builder :: proc(
-	physical_device: ^Physical_Device,
+device_builder_init :: proc(
+	self: ^Device_Builder,
 	allocator := context.allocator,
 	loc := #caller_location,
-) -> (
-	builder: ^Device_Builder,
 ) {
-	ensure(physical_device != nil, "Invalid Physical Device", loc)
+	assert(self != nil, "Invalid device builder", loc)
+	assert(self.initialized == false, "Device builder already initialized", loc)
 
-	builder = new(Device_Builder, allocator)
+	self.allocator = allocator
 
-	builder.allocator = allocator
-	builder.physical_device = physical_device
-	builder.pnext_chain.allocator = builder.allocator
-	builder.queue_descriptions.allocator = builder.allocator
+	self.vk_pnext_chain = make([dynamic]^vk.BaseOutStructure, 0, 16, self.allocator)
+	self.queue_descriptions = make([dynamic]Custom_Queue_Description, 0, 16, self.allocator)
 
-	return
+	self.initialized = true
 }
 
-destroy_device_builder :: proc(self: ^Device_Builder, loc := #caller_location) {
-	assert(self != nil, "Invalid Device Builder", loc)
+device_builder_uninit :: proc(self: ^Device_Builder, loc := #caller_location) {
+	assert(self != nil, "Invalid device builder", loc)
+	assert(self.initialized, "Device builder is not initialized", loc)
+
 	context.allocator = self.allocator
 	delete(self.queue_descriptions)
-	delete(self.pnext_chain)
-	free(self)
+	delete(self.vk_pnext_chain)
+
+	self.initialized = false
 }
 
 @(require_results)
 device_builder_build :: proc(
 	self: ^Device_Builder,
+	physical_device: ^Physical_Device,
+	device: ^Device,
 	allocator := context.allocator,
 	loc := #caller_location,
 ) -> (
-	device: ^Device,
 	err: Error,
 ) {
+	assert(device != nil, "Invalid out device", loc)
+
 	ta := context.temp_allocator
 	runtime.DEFAULT_TEMP_ALLOCATOR_TEMP_GUARD(ignore = allocator == ta)
 
 	queue_descriptions := make([dynamic]Custom_Queue_Description, ta)
 
 	if len(self.queue_descriptions) == 0 {
-		for i in 0 ..< len(self.physical_device.queue_families) {
+		for i in 0 ..< len(physical_device.vk_queue_families) {
 			append(&queue_descriptions, Custom_Queue_Description{ u32(i), { 1.0 } })
 		}
 	} else {
@@ -2363,16 +2402,16 @@ device_builder_build :: proc(
 	extensions_to_enable := make(
 		[dynamic]cstring,
 		0,
-		len(self.physical_device.extensions_to_enable),
+		len(physical_device.extensions_to_enable),
 		ta,
 	)
 
-	for ext in self.physical_device.extensions_to_enable {
+	for ext in physical_device.extensions_to_enable {
 		append(&extensions_to_enable, strings.clone_to_cstring(ext, ta))
 	}
 
 	// Extension `VK_KHR_swapchain` is required to present surface
-	if self.physical_device.surface != 0 || self.physical_device.defer_surface_initialization {
+	if physical_device.vk_surface != 0 || physical_device.defer_surface_initialization {
 		append(&extensions_to_enable, vk.KHR_SWAPCHAIN_EXTENSION_NAME)
 	}
 
@@ -2380,14 +2419,14 @@ device_builder_build :: proc(
 	device_create_info: vk.DeviceCreateInfo
 
 	user_defined_phys_dev_features_2 := false
-	for &next in self.pnext_chain {
+	for &next in self.vk_pnext_chain {
 		if next.sType == .PHYSICAL_DEVICE_FEATURES_2 {
 			user_defined_phys_dev_features_2 = true
 			break
 		}
 	}
 
-	if user_defined_phys_dev_features_2 && len(self.physical_device.extended_features_chain) > 0 {
+	if user_defined_phys_dev_features_2 && len(physical_device.extended_features_chain) > 0 {
 		err = Device_Error {
 			kind = .VkFeatures2_Pnext_Chain,
 			result = .ERROR_INITIALIZATION_FAILED,
@@ -2402,29 +2441,29 @@ device_builder_build :: proc(
 	}
 
 	if !user_defined_phys_dev_features_2 {
-		if self.physical_device.instance_version > vk.API_VERSION_1_1 ||
-		   self.physical_device.properties2_ext_enabled {
-			local_features2.features = self.physical_device.features
+		if physical_device.instance_version > vk.API_VERSION_1_1 ||
+		   physical_device.properties2_ext_enabled {
+			local_features2.features = physical_device.vk_features
 			append(&final_pnext_chain, cast(^vk.BaseOutStructure)&local_features2)
 
-			for &features_node in self.physical_device.extended_features_chain {
+			for &features_node in physical_device.extended_features_chain {
 				append(&final_pnext_chain, cast(^vk.BaseOutStructure)&features_node.pNext)
 			}
 		} else {
 			// Only set device_create_info.pEnabledFeatures when the pNext chain does not contain a
 			// vk.PhysicalDeviceFeatures2 structure
-			device_create_info.pEnabledFeatures = &self.physical_device.features
+			device_create_info.pEnabledFeatures = &physical_device.vk_features
 		}
 	}
 
-	for &pnext in self.pnext_chain {
+	for &pnext in self.vk_pnext_chain {
 		append(&final_pnext_chain, pnext)
 	}
 
 	setup_pnext_chain(&device_create_info, &final_pnext_chain, loc)
 
 	device_create_info.sType = .DEVICE_CREATE_INFO
-	device_create_info.flags = self.flags
+	device_create_info.flags = self.vk_flags
 	device_create_info.queueCreateInfoCount = u32(len(queue_create_infos))
 	device_create_info.pQueueCreateInfos = raw_data(queue_create_infos[:])
 	device_create_info.enabledExtensionCount = u32(len(extensions_to_enable))
@@ -2432,24 +2471,26 @@ device_builder_build :: proc(
 
 	vk_device: vk.Device
 	vk_check(vk.CreateDevice(
-		self.physical_device.physical_device,
+		physical_device.vk_physical_device,
 		&device_create_info,
-		self.allocation_callbacks,
+		self.vk_allocation_callbacks,
 		&vk_device,
 	), "Failed to create logical device", loc) or_return
 
-	device = new_clone(Device{
-		device               = vk_device,
-		physical_device      = self.physical_device,
-		surface              = self.physical_device.surface,
-		allocation_callbacks = self.allocation_callbacks,
-		instance_version     = self.physical_device.instance_version,
-		allocator            = allocator,
-	}, allocator)
+	device^ = {
+		vk_device               = vk_device,
+		vk_physical_device      = physical_device.vk_physical_device,
+		vk_surface              = physical_device.vk_surface,
+		vk_allocation_callbacks = self.vk_allocation_callbacks,
+		instance_version        = physical_device.instance_version,
+		allocator               = allocator,
+		initialized             = true,
+	}
 
-	queue_families := make([]vk.QueueFamilyProperties, len(self.physical_device.queue_families), allocator)
-	copy(queue_families, self.physical_device.queue_families[:])
-	device.queue_families = queue_families
+	queue_families :=
+		make([]vk.QueueFamilyProperties, len(physical_device.vk_queue_families), allocator)
+	copy(queue_families, physical_device.vk_queue_families[:])
+	device.vk_queue_families = queue_families
 
 	vk.load_proc_addresses_device(vk_device)
 
@@ -2461,7 +2502,7 @@ device_builder_set_allocation_callbacks :: proc(
 	self: ^Device_Builder,
 	callbacks: ^vk.AllocationCallbacks,
 ) {
-	self.allocation_callbacks = callbacks
+	self.vk_allocation_callbacks = callbacks
 }
 
 // For Advanced Users: specify the exact list of `vk.DeviceQueueCreateInfo`'s needed
@@ -2479,7 +2520,7 @@ device_builder_custom_queue_setup :: proc(
 //
 // The structure must be valid when `device_builder_build()` is called.
 device_builder_add_pnext :: proc(self: ^Device_Builder, structure: ^$T) {
-	append(&self.pnext_chain, cast(^vk.BaseOutStructure)structure)
+	append(&self.vk_pnext_chain, cast(^vk.BaseOutStructure)structure)
 }
 
 // -----------------------------------------------------------------------------
@@ -2494,32 +2535,34 @@ Queue_Type :: enum {
 }
 
 Device :: struct {
-	device:               vk.Device,
-	physical_device:      ^Physical_Device,
-	surface:              vk.SurfaceKHR,
-	queue_families:       []vk.QueueFamilyProperties,
-	allocation_callbacks: ^vk.AllocationCallbacks,
-	get_device_proc_addr: vk.ProcGetDeviceProcAddr,
-	instance_version:     u32,
+	vk_device:               vk.Device,
+	vk_physical_device:      vk.PhysicalDevice,
+	vk_surface:              vk.SurfaceKHR,
+	vk_queue_families:       []vk.QueueFamilyProperties,
+	vk_allocation_callbacks: ^vk.AllocationCallbacks,
+	vk_get_device_proc_addr: vk.ProcGetDeviceProcAddr,
+	instance_version:        u32,
 
 	// Internal
-	allocator:            runtime.Allocator,
+	allocator:               runtime.Allocator,
+	initialized:             bool,
 }
 
 destroy_device :: proc(self: ^Device, loc := #caller_location) {
-	assert(self != nil, "Invalid Device", loc)
-	context.allocator = self.allocator
-	vk.DestroyDevice(self.device, self.allocation_callbacks)
-	delete(self.queue_families)
-	free(self)
+	assert(self != nil, "Invalid device", loc)
+	assert(self.initialized, "Device is not initialized", loc)
+
+	delete(self.vk_queue_families, self.allocator)
+	vk.DestroyDevice(self.vk_device, self.vk_allocation_callbacks)
+	self.initialized = false
 }
 
-device_get_queue_index :: proc(device: ^Device, type: Queue_Type) -> (index: u32, err: Error) {
+device_get_queue_index :: proc(self: Device, type: Queue_Type) -> (index: u32, err: Error) {
 	index = vk.QUEUE_FAMILY_IGNORED
 	switch type {
 	case .Present:
 		index = get_present_queue_index(
-			device.queue_families, device.physical_device.physical_device, device.surface)
+			self.vk_queue_families, self.vk_physical_device, self.vk_surface)
 		if index == vk.QUEUE_FAMILY_IGNORED {
 			err = Queue_Error {
 				.Present_Unavailable, .ERROR_INITIALIZATION_FAILED, "Present unavailable",
@@ -2527,7 +2570,7 @@ device_get_queue_index :: proc(device: ^Device, type: Queue_Type) -> (index: u32
 			return
 		}
 	case .Graphics:
-		index = get_first_queue_index(device.queue_families, { .GRAPHICS })
+		index = get_first_queue_index(self.vk_queue_families, { .GRAPHICS })
 		if index == vk.QUEUE_FAMILY_IGNORED {
 			err = Queue_Error {
 				.Graphics_Unavailable, .ERROR_INITIALIZATION_FAILED, "Graphics unavailable",
@@ -2535,7 +2578,7 @@ device_get_queue_index :: proc(device: ^Device, type: Queue_Type) -> (index: u32
 			return
 		}
 	case .Compute:
-		index = get_separate_queue_index(device.queue_families, { .COMPUTE }, { .TRANSFER })
+		index = get_separate_queue_index(self.vk_queue_families, { .COMPUTE }, { .TRANSFER })
 		if index == vk.QUEUE_FAMILY_IGNORED {
 			err = Queue_Error {
 				.Compute_Unavailable, .ERROR_INITIALIZATION_FAILED, "Compute unavailable",
@@ -2543,7 +2586,7 @@ device_get_queue_index :: proc(device: ^Device, type: Queue_Type) -> (index: u32
 			return
 		}
 	case .Transfer:
-		index = get_separate_queue_index(device.queue_families, { .TRANSFER }, { .COMPUTE })
+		index = get_separate_queue_index(self.vk_queue_families, { .TRANSFER }, { .COMPUTE })
 		if index == vk.QUEUE_FAMILY_IGNORED {
 			err = Queue_Error {
 				.Transfer_Unavailable, .ERROR_INITIALIZATION_FAILED, "Transfer unavailable",
@@ -2560,11 +2603,16 @@ device_get_queue_index :: proc(device: ^Device, type: Queue_Type) -> (index: u32
 	return
 }
 
-device_get_dedicated_queue_index :: proc(device: ^Device, type: Queue_Type) -> (index: u32, err: Error) {
+device_get_dedicated_queue_index :: proc(
+	self: Device, type: Queue_Type,
+) -> (
+	index: u32,
+	err: Error,
+) {
 	index = vk.QUEUE_FAMILY_IGNORED
 	#partial switch type {
 	case .Compute:
-		index = get_dedicated_queue_index(device.queue_families, { .COMPUTE }, { .TRANSFER })
+		index = get_dedicated_queue_index(self.vk_queue_families, { .COMPUTE }, { .TRANSFER })
 		if index == vk.QUEUE_FAMILY_IGNORED {
 			err = Queue_Error {
 				.Compute_Unavailable, .ERROR_INITIALIZATION_FAILED, "Compute unavailable",
@@ -2572,11 +2620,13 @@ device_get_dedicated_queue_index :: proc(device: ^Device, type: Queue_Type) -> (
 			return
 		}
 	case .Transfer:
-		index = get_dedicated_queue_index(device.queue_families, { .TRANSFER }, { .COMPUTE })
-		err = Queue_Error {
-			.Transfer_Unavailable, .ERROR_INITIALIZATION_FAILED, "Transfer unavailable",
+		index = get_dedicated_queue_index(self.vk_queue_families, { .TRANSFER }, { .COMPUTE })
+		if index == vk.QUEUE_FAMILY_IGNORED {
+			err = Queue_Error {
+				.Transfer_Unavailable, .ERROR_INITIALIZATION_FAILED, "Transfer unavailable",
+			}
+			return
 		}
-		return
 	case:
 		err = Queue_Error {
 			.Invalid_Queue_Family_Index, .ERROR_INITIALIZATION_FAILED, "Invalid queue family index",
@@ -2587,15 +2637,20 @@ device_get_dedicated_queue_index :: proc(device: ^Device, type: Queue_Type) -> (
 	return
 }
 
-device_get_queue :: proc(device: ^Device, type: Queue_Type) -> (out_queue: vk.Queue, err: Error) {
-	index := device_get_queue_index(device, type) or_return
-	vk.GetDeviceQueue(device.device, index, 0, &out_queue)
+device_get_queue :: proc(self: Device, type: Queue_Type) -> (out_queue: vk.Queue, err: Error) {
+	index := device_get_queue_index(self, type) or_return
+	vk.GetDeviceQueue(self.vk_device, index, 0, &out_queue)
 	return
 }
 
-device_get_dedicated_queue :: proc(device: ^Device, type: Queue_Type) -> (out_queue: vk.Queue, err: Error) {
-	index := device_get_dedicated_queue_index(device, type) or_return
-	vk.GetDeviceQueue(device.device, index, 0, &out_queue)
+device_get_dedicated_queue :: proc(
+	self: Device, type: Queue_Type,
+) -> (
+	out_queue: vk.Queue,
+	err: Error,
+) {
+	index := device_get_dedicated_queue_index(self, type) or_return
+	vk.GetDeviceQueue(self.vk_device, index, 0, &out_queue)
 	return
 }
 
@@ -2627,66 +2682,71 @@ Swapchain_Builder :: struct {
 	allocation_callbacks:     ^vk.AllocationCallbacks,
 
 	// Internal
-	allocator: runtime.Allocator,
+	allocator:                runtime.Allocator,
+	initialized:              bool,
 }
 
 @(private)
-swapchain_builder_default_impl :: proc(
-	device: ^Device,
+swapchain_builder_init_impl :: proc(
+	self: ^Swapchain_Builder,
+	device: Device,
 	allocator := context.allocator,
 	loc := #caller_location,
-) -> ^Swapchain_Builder {
-	builder := new_clone(Swapchain_Builder {
-		physical_device   = device.physical_device.physical_device,
-		device            = device.device,
-		instance_version  = device.instance_version,
-		desired_width     = 256,
-		desired_height    = 256,
-		array_layer_count = 1,
-		image_usage_flags = { .COLOR_ATTACHMENT },
-		composite_alpha   = { .OPAQUE },
-		clipped           = true,
-		allocator         = allocator,
-	}, allocator)
+) {
+	// Internal allocator
+	self.allocator = allocator
 
-	builder.pnext_chain.allocator = allocator
-	builder.desired_formats.allocator = allocator
-	builder.desired_present_modes.allocator = allocator
+	// Default values
+	self.physical_device   = device.vk_physical_device
+	self.device            = device.vk_device
+	self.instance_version  = device.instance_version
+	self.desired_width     = 256
+	self.desired_height    = 256
+	self.array_layer_count = 1
+	self.image_usage_flags = { .COLOR_ATTACHMENT }
+	self.composite_alpha   = { .OPAQUE }
+	self.clipped           = true
 
-	return builder
+	self.pnext_chain = make([dynamic]^vk.BaseOutStructure, 0, 16, self.allocator)
+	self.desired_formats = make([dynamic]vk.SurfaceFormatKHR, 0, 16, self.allocator)
+	self.desired_present_modes = make([dynamic]vk.PresentModeKHR, 0, 16, self.allocator)
+
+	self.initialized = true
 }
 
-create_swapchain_builder_default :: proc(
-	device: ^Device,
+swapchain_builder_init_default :: proc(
+	self: ^Swapchain_Builder,
+	device: Device,
 	allocator := context.allocator,
-) -> ^Swapchain_Builder {
-	builder := swapchain_builder_default_impl(device, allocator)
-	builder.surface = device.surface
-	return builder
+) {
+	swapchain_builder_init_impl(self, device, allocator)
+	self.surface = device.vk_surface
 }
 
-create_swapchain_builder_surface :: proc(
-	device: ^Device,
+swapchain_builder_init_surface :: proc(
+	self: ^Swapchain_Builder,
+	device: Device,
 	surface: vk.SurfaceKHR,
 	allocator := context.allocator,
-) -> ^Swapchain_Builder {
-	builder := swapchain_builder_default_impl(device, allocator)
-	builder.surface = surface
-	return builder
+) {
+	swapchain_builder_init_impl(self, device, allocator)
+	self.surface = surface
 }
 
-create_swapchain_builder_queue_index :: proc(
-	physical_device: ^Physical_Device,
-	device: ^Device,
+swapchain_builder_init_queue_index :: proc(
+	self: ^Swapchain_Builder,
+	physical_device: Physical_Device,
+	device: Device,
 	surface: vk.SurfaceKHR,
 	graphics_queue_index: u32,
 	present_queue_index: u32,
 	allocator := context.allocator,
-) -> (
-	builder: ^Swapchain_Builder,
 ) {
-	builder = swapchain_builder_default_impl(device, allocator)
-	builder.surface = surface
+	swapchain_builder_init_impl(self, device, allocator)
+	self.surface = surface
+
+	self.graphics_queue_index = graphics_queue_index
+	self.present_queue_index = present_queue_index
 
 	if graphics_queue_index == vk.QUEUE_FAMILY_IGNORED ||
 	   present_queue_index == vk.QUEUE_FAMILY_IGNORED {
@@ -2696,58 +2756,61 @@ create_swapchain_builder_queue_index :: proc(
 		// Get the device queue families
 		queue_family_count: u32
 		vk.GetPhysicalDeviceQueueFamilyProperties(
-			physical_device.physical_device, &queue_family_count, nil)
+			physical_device.vk_physical_device, &queue_family_count, nil)
 		if queue_family_count == 0 {
 			return
 		}
 
 		queue_families := make([]vk.QueueFamilyProperties, int(queue_family_count), ta)
 		vk.GetPhysicalDeviceQueueFamilyProperties(
-			physical_device.physical_device,
+			physical_device.vk_physical_device,
 			&queue_family_count,
 			raw_data(queue_families),
 		)
 
 		if graphics_queue_index == vk.QUEUE_FAMILY_IGNORED {
-			builder.graphics_queue_index = get_first_queue_index(queue_families, {.GRAPHICS})
+			self.graphics_queue_index = get_first_queue_index(queue_families, {.GRAPHICS})
 		}
 
 		if present_queue_index == vk.QUEUE_FAMILY_IGNORED {
-			builder.present_queue_index = get_present_queue_index(
+			self.present_queue_index = get_present_queue_index(
 				queue_families,
-				physical_device.physical_device,
+				physical_device.vk_physical_device,
 				surface,
 			)
 		}
 	}
-
-	return builder
 }
 
-create_swapchain_builder :: proc {
-	create_swapchain_builder_default,
-	create_swapchain_builder_surface,
-	create_swapchain_builder_queue_index,
+swapchain_builder_init :: proc {
+	swapchain_builder_init_default,
+	swapchain_builder_init_surface,
+	swapchain_builder_init_queue_index,
 }
 
-destroy_swapchain_builder :: proc(self: ^Swapchain_Builder, loc := #caller_location) {
-	assert(self != nil, "Invalid Swapchain_Builder", loc)
+swapchain_builder_uninit :: proc(self: ^Swapchain_Builder, loc := #caller_location) {
+	assert(self != nil, "Invalid swapchain builder", loc)
+	assert(self.initialized, "Swapchain builder is not initialized", loc)
+
 	context.allocator = self.allocator
 	delete(self.pnext_chain)
 	delete(self.desired_formats)
 	delete(self.desired_present_modes)
-	free(self)
+
+	self.initialized = false
 }
 
 swapchain_builder_build :: proc(
 	self: ^Swapchain_Builder,
+	swapchain: ^Swapchain,
 	allocator := context.allocator,
 	loc := #caller_location,
 ) -> (
-	swapchain: ^Swapchain,
 	err: Error,
 ) {
-	assert(self != nil, "Invalid Swapchain_Builder", loc)
+	assert(self != nil, "Invalid swapchain builder", loc)
+	assert(self.initialized, "Swapchain builder is not initialized", loc)
+	assert(swapchain != nil, "Invalid out swapchain", loc)
 
 	if self.surface == 0 {
 		err = Swapchain_Error {
@@ -2784,8 +2847,10 @@ swapchain_builder_build :: proc(
 	if self.required_min_image_count >= 1 {
 		if self.required_min_image_count < surface_support.capabilities.minImageCount {
 			err = Swapchain_Error {
-				.Required_Min_Image_Count_Too_Low, .ERROR_INITIALIZATION_FAILED, "Required min image count too low",
+				.Required_Min_Image_Count_Too_Low, .ERROR_INITIALIZATION_FAILED,
+					"Required min image count too low",
 			}
+			return
 		}
 		image_count = self.required_min_image_count
 	} else if (self.min_image_count == 0) {
@@ -2798,7 +2863,8 @@ swapchain_builder_build :: proc(
 			image_count = surface_support.capabilities.minImageCount
 		}
 	}
-	if surface_support.capabilities.maxImageCount > 0 && image_count > surface_support.capabilities.maxImageCount {
+	if surface_support.capabilities.maxImageCount > 0 &&
+			image_count > surface_support.capabilities.maxImageCount {
 		image_count = surface_support.capabilities.maxImageCount
 	}
 
@@ -2834,9 +2900,11 @@ swapchain_builder_build :: proc(
 		(present_mode == .FIFO_RELAXED)
 
 	if is_unextended_present_mode &&
-		(self.image_usage_flags & surface_support.capabilities.supportedUsageFlags) != self.image_usage_flags {
+		(self.image_usage_flags &
+			surface_support.capabilities.supportedUsageFlags) != self.image_usage_flags {
 		err = Swapchain_Error {
-			.Required_Usage_Not_Supported, .ERROR_INITIALIZATION_FAILED, "Required usage not supported",
+			.Required_Usage_Not_Supported, .ERROR_INITIALIZATION_FAILED,
+				"Required usage not supported",
 		}
 		return
 	}
@@ -2889,22 +2957,25 @@ swapchain_builder_build :: proc(
 		&vk_swapchain,
 	), "vk.CreateSwapchainKHR failed", loc) or_return
 
-	swapchain = new_clone(Swapchain {
-		device                    = self.device,
-		swapchain                 = vk_swapchain,
-		image_format              = surface_format.format,
-		color_space               = surface_format.colorSpace,
-		image_usage_flags         = self.image_usage_flags,
-		extent                    = extent,
+	swapchain^ = {
+		vk_device                 = self.device,
+		vk_swapchain              = vk_swapchain,
+		vk_image_format           = surface_format.format,
+		vk_color_space            = surface_format.colorSpace,
+		vk_image_usage_flags      = self.image_usage_flags,
+		vk_extent                 = extent,
+		min_image_count           = surface_support.capabilities.minImageCount,
+		max_image_count           = surface_support.capabilities.maxImageCount,
 		requested_min_image_count = image_count,
-		present_mode              = present_mode,
+		vk_present_mode           = present_mode,
 		instance_version          = self.instance_version,
-		allocation_callbacks      = self.allocation_callbacks,
+		vk_allocation_callbacks   = self.allocation_callbacks,
 		allocator                 = allocator,
-	}, allocator)
+		initialized               = true,
+	}
 	defer if err != nil { destroy_swapchain(swapchain) }
 
-	images := swapchain_get_images(swapchain, allocator = ta) or_return
+	images := swapchain_get_images(swapchain^, allocator = ta) or_return
 	swapchain.image_count = u32(len(images))
 
 	return
@@ -2984,7 +3055,7 @@ swapchain_builder_utils_query_surface_support_details :: proc(
 		surface,
 		&present_mode_count,
 		raw_data(details.present_modes),
-	), "vk.GetPhysicalDeviceSurfacePresentModesKHR", loc) or_return
+	), "vk.GetPhysicalDeviceSurfacePresentModesKHR failed", loc) or_return
 
 	return
 }
@@ -3048,11 +3119,11 @@ swapchain_builder_utils_find_extent :: proc(
 }
 
 swapchain_builder_utils_find_present_mode :: proc(
-	available_resent_modes: ^[]vk.PresentModeKHR,
+	available_present_modes: ^[]vk.PresentModeKHR,
 	desired_present_modes: ^[dynamic]vk.PresentModeKHR,
 ) -> vk.PresentModeKHR {
 	#reverse for desired in desired_present_modes {
-		for available in available_resent_modes {
+		for available in available_present_modes {
 			// finds the first present mode that is desired and available
 			if (desired == available) {
 				return desired
@@ -3066,15 +3137,19 @@ swapchain_builder_utils_find_present_mode :: proc(
 
 // Set the oldSwapchain member of `vk.SwapchainCreateInfoKHR`.
 // For use in rebuilding a swapchain.
-swapchain_builder_set_old_swapchain_handle :: proc(self: ^Swapchain_Builder, old_swapchain: vk.SwapchainKHR) {
+swapchain_builder_set_old_swapchain_handle :: proc(
+	self: ^Swapchain_Builder, old_swapchain: vk.SwapchainKHR,
+) {
 	self.old_swapchain = old_swapchain
 }
 
 // Set the oldSwapchain member of `vk.SwapchainCreateInfoKHR`.
 // For use in rebuilding a swapchain.
-swapchain_builder_set_old_swapchain_vkb :: proc(self: ^Swapchain_Builder, old_swapchain: ^Swapchain) {
-	if old_swapchain != nil && old_swapchain.swapchain != 0 {
-		self.old_swapchain = old_swapchain.swapchain
+swapchain_builder_set_old_swapchain_vkb :: proc(
+	self: ^Swapchain_Builder, old_swapchain: Swapchain,
+) {
+	if old_swapchain != {} && old_swapchain.vk_swapchain != 0 {
+		self.old_swapchain = old_swapchain.vk_swapchain
 	}
 }
 
@@ -3093,12 +3168,16 @@ swapchain_builder_set_desired_extent :: proc(self: ^Swapchain_Builder, width, he
 }
 
 // When determining the surface format, make this the first to be used if supported.
-swapchain_builder_set_desired_format :: proc(self: ^Swapchain_Builder, format: vk.SurfaceFormatKHR) {
+swapchain_builder_set_desired_format :: proc(
+	self: ^Swapchain_Builder, format: vk.SurfaceFormatKHR,
+) {
 	inject_at(&self.desired_formats, 0, format)
 }
 
 // Add this swapchain format to the end of the list of formats selected from.
-swapchain_builder_add_fallback_format :: proc(self: ^Swapchain_Builder, format: vk.SurfaceFormatKHR) {
+swapchain_builder_add_fallback_format :: proc(
+	self: ^Swapchain_Builder, format: vk.SurfaceFormatKHR,
+) {
 	append(&self.desired_formats, format)
 }
 
@@ -3111,12 +3190,16 @@ swapchain_builder_use_default_format_selection :: proc(self: ^Swapchain_Builder)
 }
 
 // When determining the present mode, make this the first to be used if supported.
-swapchain_builder_set_desired_present_mode :: proc(self: ^Swapchain_Builder, present_mode: vk.PresentModeKHR) {
+swapchain_builder_set_desired_present_mode :: proc(
+	self: ^Swapchain_Builder, present_mode: vk.PresentModeKHR,
+) {
 	inject_at(&self.desired_present_modes, 0, present_mode)
 }
 
 // Add this present mode to the end of the list of present modes selected from.
-swapchain_builder_add_fallback_present_mode :: proc(self: ^Swapchain_Builder, present_mode: vk.PresentModeKHR) {
+swapchain_builder_add_fallback_present_mode :: proc(
+	self: ^Swapchain_Builder, present_mode: vk.PresentModeKHR,
+) {
 	append(&self.desired_present_modes, present_mode)
 }
 
@@ -3132,12 +3215,16 @@ swapchain_builder_use_default_present_mode_selection :: proc(self: ^Swapchain_Bu
 //
 // If the surface capabilities cannot allow it, building the swapchain will result
 // in the `Swapchain_Error.Required_Usage_Not_Supported` error.
-swapchain_builder_set_image_usage_flags :: proc(self: ^Swapchain_Builder, usage_flags: vk.ImageUsageFlags) {
+swapchain_builder_set_image_usage_flags :: proc(
+	self: ^Swapchain_Builder, usage_flags: vk.ImageUsageFlags,
+) {
 	self.image_usage_flags = usage_flags
 }
 
 // Add a image usage to the bitmask for acquired swapchain images.
-swapchain_builder_add_image_usage_flags :: proc(self: ^Swapchain_Builder, usage_flags: vk.ImageUsageFlags) {
+swapchain_builder_add_image_usage_flags :: proc(
+	self: ^Swapchain_Builder, usage_flags: vk.ImageUsageFlags,
+) {
 	self.image_usage_flags += usage_flags
 }
 
@@ -3150,7 +3237,9 @@ swapchain_builder_use_default_image_usage_flags :: proc(self: ^Swapchain_Builder
 }
 
 // Set the number of views in for multiview/stereo surface
-swapchain_builder_set_image_array_layer_count :: proc(self: ^Swapchain_Builder, array_layer_count: u32) {
+swapchain_builder_set_image_array_layer_count :: proc(
+	self: ^Swapchain_Builder, array_layer_count: u32,
+) {
 	self.array_layer_count = array_layer_count
 }
 
@@ -3161,7 +3250,9 @@ swapchain_builder_set_image_array_layer_count :: proc(self: ^Swapchain_Builder, 
 // any integer value. For instance, if you pass `DOUBLE_BUFFERING`, the presentation
 // engine is allowed to give you a double buffering setup, triple buffering, or
 // more. This is up to the drivers.
-swapchain_builder_set_desired_min_image_count :: proc(self: ^Swapchain_Builder, min_image_count: u32) {
+swapchain_builder_set_desired_min_image_count :: proc(
+	self: ^Swapchain_Builder, min_image_count: u32,
+) {
 	self.min_image_count = min_image_count
 }
 
@@ -3171,7 +3262,9 @@ swapchain_builder_set_desired_min_image_count :: proc(self: ^Swapchain_Builder, 
 // in the `Swapchain_Error.Required_Min_Image_Count_Too_Low` error. Otherwise, the
 // same observations from `set_desired_min_image_count()` apply. A value of 0 is
 // specially interpreted as meaning "no requirement", and is the behavior by default.
-swapchain_builder_set_required_min_image_count :: proc(self: ^Swapchain_Builder, required_min_image_count: u32) {
+swapchain_builder_set_required_min_image_count :: proc(
+	self: ^Swapchain_Builder, required_min_image_count: u32,
+) {
 	self.required_min_image_count = required_min_image_count
 }
 
@@ -3189,19 +3282,25 @@ swapchain_builder_set_clipped :: proc(self: ^Swapchain_Builder, clipped := true)
 }
 
 // Set the `vk.SwapchainCreateFlagsKHR`.
-swapchain_builder_set_create_flags :: proc(self: ^Swapchain_Builder, create_flags: vk.SwapchainCreateFlagsKHR) {
+swapchain_builder_set_create_flags :: proc(
+	self: ^Swapchain_Builder, create_flags: vk.SwapchainCreateFlagsKHR,
+) {
 	self.create_flags = create_flags
 }
 
 // Set the transform to be applied, like a 90 degree rotation. Default is no transform.
-swapchain_builder_set_pre_transform_flags :: proc(self: ^Swapchain_Builder, pre_transform_flags: vk.SurfaceTransformFlagsKHR) {
+swapchain_builder_set_pre_transform_flags :: proc(
+	self: ^Swapchain_Builder, pre_transform_flags: vk.SurfaceTransformFlagsKHR,
+) {
 	self.pre_transform = pre_transform_flags
 }
 
 // Set the alpha channel to be used with other windows in on the system.
 //
 // Default is `{ .OPAQUE }`.
-swapchain_builder_set_composite_alpha_flags :: proc(self: ^Swapchain_Builder, composite_alpha_flags: vk.CompositeAlphaFlagsKHR ) {
+swapchain_builder_set_composite_alpha_flags :: proc(
+	self: ^Swapchain_Builder, composite_alpha_flags: vk.CompositeAlphaFlagsKHR,
+ ) {
 	self.composite_alpha = composite_alpha_flags
 }
 
@@ -3213,7 +3312,9 @@ swapchain_builder_add_pnext :: proc(self: ^Swapchain_Builder, structure: ^$T) {
 }
 
 // Provide custom allocation callbacks.
-swapchain_builder_set_allocation_callbacks :: proc(self: ^Swapchain_Builder, callbacks: ^vk.AllocationCallbacks) {
+swapchain_builder_set_allocation_callbacks :: proc(
+	self: ^Swapchain_Builder, callbacks: ^vk.AllocationCallbacks,
+) {
 	self.allocation_callbacks = callbacks
 }
 
@@ -3227,43 +3328,40 @@ Queue_Family_Indices :: enum {
 }
 
 Swapchain :: struct {
-	device:                    vk.Device,
-	swapchain:                 vk.SwapchainKHR,
+	vk_device:                 vk.Device,
+	vk_swapchain:              vk.SwapchainKHR,
 	image_count:               u32,
-	image_format:              vk.Format,
-	color_space:               vk.ColorSpaceKHR,
-	image_usage_flags:         vk.ImageUsageFlags,
-	extent:                    vk.Extent2D,
+	min_image_count:           u32,
+	max_image_count:           u32,
+	vk_image_format:           vk.Format,
+	vk_color_space:            vk.ColorSpaceKHR,
+	vk_image_usage_flags:      vk.ImageUsageFlags,
+	vk_extent:                 vk.Extent2D,
 	requested_min_image_count: u32,
-	present_mode:              vk.PresentModeKHR,
+	vk_present_mode:           vk.PresentModeKHR,
 	instance_version:          u32,
-	allocation_callbacks:      ^vk.AllocationCallbacks,
-	allocator:                 runtime.Allocator,
-}
+	vk_allocation_callbacks:   ^vk.AllocationCallbacks,
 
-create_swapchain_default_impl :: proc(device: ^Device) -> (swapchain: ^Swapchain) {
-	swapchain = new_clone(Swapchain {
-		color_space      = .SRGB_NONLINEAR,
-		present_mode     = .IMMEDIATE,
-		instance_version = device.instance_version,
-		allocator        = device.allocator,
-	}, device.allocator)
-	return
+	// Internal
+	allocator:                 runtime.Allocator,
+	initialized:               bool,
 }
 
 destroy_swapchain :: proc(self: ^Swapchain, loc := #caller_location) {
-	assert(self != nil, "Invalid Swapchain", loc)
-	context.allocator = self.allocator
-	if self.device != nil && self.swapchain != 0 {
-		vk.DestroySwapchainKHR(self.device, self.swapchain, self.allocation_callbacks)
+	assert(self != nil, "Invalid swapchain", loc)
+	assert(self.initialized, "Swapchain is not initialized", loc)
+
+	if self.vk_device != nil && self.vk_swapchain != 0 {
+		vk.DestroySwapchainKHR(self.vk_device, self.vk_swapchain, self.vk_allocation_callbacks)
 	}
-	free(self)
+
+	self.initialized = false
 }
 
 //Returns a slice of `vk.Image` handles to the swapchain.
 @(require_results)
 swapchain_get_images :: proc(
-	self: ^Swapchain,
+	self: Swapchain,
 	max_images: u32 = 0,
 	allocator := context.allocator,
 	loc := #caller_location,
@@ -3271,12 +3369,12 @@ swapchain_get_images :: proc(
 	images: []vk.Image,
 	err: Error,
 ) {
-	assert(self != nil, "Invalid Swapchain", loc)
+	assert(self.vk_swapchain != {}, "Invalid Swapchain", loc)
 
 	// Get the number of images in the swapchain
 	image_count: u32 = 0
 	vk_check(vk.GetSwapchainImagesKHR(
-		self.device, self.swapchain, &image_count, nil,
+		self.vk_device, self.vk_swapchain, &image_count, nil,
 	), "vk.GetSwapchainImagesKHR failed", loc) or_return
 
 	// Limit the number of images if `max_images` is specified
@@ -3290,18 +3388,18 @@ swapchain_get_images :: proc(
 
 	// Retrieve the actual images
 	vk_check(vk.GetSwapchainImagesKHR(
-		self.device,
-		self.swapchain,
+		self.vk_device,
+		self.vk_swapchain,
 		&image_count,
 		raw_data(images),
-	), "vk.GetSwapchainImagesKHR", loc) or_return
+	), "vk.GetSwapchainImagesKHR failed", loc) or_return
 
 	return
 }
 
 // Returns a slice of vk.ImageView's to the `vk.Image`'s of the swapchain.
 swapchain_get_image_views :: proc(
-	self: ^Swapchain,
+	self: Swapchain,
 	pNext: rawptr = nil,
 	allocator := context.allocator,
 	loc := #caller_location,
@@ -3309,6 +3407,8 @@ swapchain_get_image_views :: proc(
 	views: []vk.ImageView,
 	err: Error,
 ) {
+	assert(self.vk_swapchain != {}, "Invalid Swapchain", loc)
+
 	ta := context.temp_allocator
 	runtime.DEFAULT_TEMP_ALLOCATOR_TEMP_GUARD(ignore = allocator == ta)
 
@@ -3328,7 +3428,7 @@ swapchain_get_image_views :: proc(
 	desired_flags := vk.ImageViewUsageCreateInfo {
 		sType = .IMAGE_VIEW_USAGE_CREATE_INFO,
 		pNext = pNext,
-		usage = self.image_usage_flags,
+		usage = self.vk_image_usage_flags,
 	}
 
 	// Total of images to create views
@@ -3354,7 +3454,7 @@ swapchain_get_image_views :: proc(
 
 		create_info.image = images[i]
 		create_info.viewType = .D2
-		create_info.format = self.image_format
+		create_info.format = self.vk_image_format
 		create_info.components = {
 			r = .IDENTITY,
 			g = .IDENTITY,
@@ -3368,9 +3468,9 @@ swapchain_get_image_views :: proc(
 		create_info.subresourceRange.layerCount = 1
 
 		vk_check(vk.CreateImageView(
-			self.device,
+			self.vk_device,
 			&create_info,
-			self.allocation_callbacks,
+			self.vk_allocation_callbacks,
 			&views[i],
 		), "vk.CreateImageView failed", loc) or_return
 	}
@@ -3378,10 +3478,12 @@ swapchain_get_image_views :: proc(
 	return
 }
 
-swapchain_destroy_image_views :: proc(self: ^Swapchain, views: []vk.ImageView, loc := #caller_location) {
+swapchain_destroy_image_views :: proc(
+	self: Swapchain, views: []vk.ImageView, loc := #caller_location,
+) {
 	for view in views {
 		assert(view != 0, "Invalid image view", loc)
-		vk.DestroyImageView(self.device, view, self.allocation_callbacks)
+		vk.DestroyImageView(self.vk_device, view, self.vk_allocation_callbacks)
 	}
 }
 
@@ -3443,14 +3545,8 @@ setup_pnext_chain :: proc(
 	structure.pNext = structs[0]
 }
 
-// API_VERSION_1_0 :: (1<<22) | (0<<12) | (0)
-// API_VERSION_1_1 :: (1<<22) | (1<<12) | (0)
-// API_VERSION_1_2 :: (1<<22) | (2<<12) | (0)
-API_VERSION_1_3 :: (0<<29) | (1<<22) | (3<<12) | (0)
-// API_VERSION_1_4 :: (1<<22) | (4<<12) | (0)
-
 MAKE_API_VERSION :: proc "contextless" (variant, major, minor, patch: u32) -> u32 {
-	return (major<<29) | (major<<22) | (minor<<12) | (patch)
+	return (variant<<29) | (major<<22) | (minor<<12) | (patch)
 }
 
 VK_VERSION_MAJOR :: proc(version: u32) -> u32 {
@@ -3899,72 +3995,72 @@ g_vklib: Vulkan_Library
 
 @(require_results)
 load_library :: proc(
-    fp_get_instance_proc_addr: vk.ProcGetInstanceProcAddr = nil,
-    loc := #caller_location,
+	fp_get_instance_proc_addr: vk.ProcGetInstanceProcAddr = nil,
+	loc := #caller_location,
 ) -> (
-    ok: bool,
+	ok: bool,
 ) {
-    sync.guard(&g_vklib.init_mutex)
+	sync.guard(&g_vklib.init_mutex)
 
-    // Can immediately return if it has already been loaded
-    if g_vklib.loaded {
-        return true
-    }
+	// Can immediately return if it has already been loaded
+	if g_vklib.loaded {
+		return true
+	}
 
-    if fp_get_instance_proc_addr != nil {
-        g_vklib.get_instance_proc_addr = fp_get_instance_proc_addr
-    } else {
-        library: dynlib.Library
-        did_load: bool
+	if fp_get_instance_proc_addr != nil {
+		g_vklib.get_instance_proc_addr = fp_get_instance_proc_addr
+	} else {
+		library: dynlib.Library
+		did_load: bool
 
-        when ODIN_OS == .Windows {
-            library, did_load = dynlib.load_library("vulkan-1.dll")
-        } else when ODIN_OS == .Darwin {
-            library, did_load = dynlib.load_library("libvulkan.dylib")
+		when ODIN_OS == .Windows {
+			library, did_load = dynlib.load_library("vulkan-1.dll")
+		} else when ODIN_OS == .Darwin {
+			library, did_load = dynlib.load_library("libvulkan.dylib")
 
-            if !did_load { library, did_load = dynlib.load_library("libvulkan.1.dylib") }
+			if !did_load { library, did_load = dynlib.load_library("libvulkan.1.dylib") }
 
-            // modern versions of macOS don't search /usr/local/lib automatically contrary to
-            // what man dlopen says Vulkan SDK uses this as the system-wide installation
-            // location, so we're going to fallback to this if all else fails
-            if !did_load {
-                ta := context.temp_allocator
-                runtime.DEFAULT_TEMP_ALLOCATOR_TEMP_GUARD()
-                _, found_lib_path := os.lookup_env("DYLD_FALLBACK_LIBRARY_PATH", ta)
-                if !found_lib_path {
-                    library, did_load = dynlib.load_library("/usr/local/lib/libvulkan.dylib")
-                }
-            }
+			// modern versions of macOS don't search /usr/local/lib automatically contrary to
+			// what man dlopen says Vulkan SDK uses this as the system-wide installation
+			// location, so we're going to fallback to this if all else fails
+			if !did_load {
+				ta := context.temp_allocator
+				runtime.DEFAULT_TEMP_ALLOCATOR_TEMP_GUARD(ignore = context.allocator == ta)
+				_, found_lib_path := os.lookup_env("DYLD_FALLBACK_LIBRARY_PATH", ta)
+				if !found_lib_path {
+					library, did_load = dynlib.load_library("/usr/local/lib/libvulkan.dylib")
+				}
+			}
 
-            if !did_load { library, did_load = dynlib.load_library("libMoltenVK.dylib") }
+			if !did_load { library, did_load = dynlib.load_library("libMoltenVK.dylib") }
 
-            // Add support for using Vulkan and MoltenVK in a Framework. App
-            // store rules for iOS strictly enforce no .dylib's. If they aren't
-            // found it just falls through
-            if !did_load { library, did_load = dynlib.load_library("vulkan.framework/vulkan") }
-            if !did_load { library, did_load = dynlib.load_library("MoltenVK.framework/MoltenVK") }
-        } else {
-            library, did_load = dynlib.load_library("libvulkan.so.1")
-            if !did_load { library, did_load = dynlib.load_library("libvulkan.so") }
-        }
+			// Add support for using Vulkan and MoltenVK in a Framework. App
+			// store rules for iOS strictly enforce no .dylib's. If they aren't
+			// found it just falls through
+			if !did_load { library, did_load = dynlib.load_library("vulkan.framework/vulkan") }
+			if !did_load { library, did_load = dynlib.load_library("MoltenVK.framework/MoltenVK") }
+		} else {
+			library, did_load = dynlib.load_library("libvulkan.so.1")
+			if !did_load { library, did_load = dynlib.load_library("libvulkan.so") }
+		}
 
-        if !did_load || library == nil {
-            return
-        }
+		if !did_load || library == nil {
+			return
+		}
 
-        g_vklib.module = library
-        if fp, found := dynlib.symbol_address(library, "vkGetInstanceProcAddr"); found {
-            g_vklib.get_instance_proc_addr = auto_cast fp
-        } else {
-            return
-        }
-    }
+		g_vklib.module = library
+		if fp, found := dynlib.symbol_address(library, "vkGetInstanceProcAddr"); found {
+			g_vklib.get_instance_proc_addr = auto_cast fp
+		} else {
+			return
+		}
+	}
 
-    // Load the base Vulkan procedures before we can start using them
-    vk.load_proc_addresses_global(auto_cast g_vklib.get_instance_proc_addr)
-    g_vklib.loaded = true
+	// Load the base Vulkan procedures before we can start using them
+	vk.load_proc_addresses_global(auto_cast g_vklib.get_instance_proc_addr)
+	g_vklib.loaded = true
 
-    return true
+	return true
 }
 
 @(fini)

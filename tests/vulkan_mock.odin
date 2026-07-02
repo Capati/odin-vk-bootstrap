@@ -621,31 +621,33 @@ destroy_surface_details :: proc(self: ^Surface_Details) {
 	delete(self.surface_formats)
 }
 
-get_instance :: proc(t: ^testing.T, minor_version: u32 = 1) -> (instance: ^vkb.Instance, ok: bool) {
-	builder := vkb.create_instance_builder()
-    defer vkb.destroy_instance_builder(builder)
-    vkb.instance_builder_request_validation_layers(builder)
-    vkb.instance_builder_require_api_version(builder, 1, minor_version, 0)
-    vkb_instance, vkb_instance_err := vkb.instance_builder_build(builder)
+get_instance :: proc(t: ^testing.T, minor_version: u32 = 1) -> (instance: vkb.Instance, ok: bool) {
+	builder: vkb.Instance_Builder
+	vkb.instance_builder_init(&builder)
+	defer vkb.instance_builder_uninit(&builder)
+	vkb.instance_builder_request_validation_layers(&builder)
+	vkb.instance_builder_require_api_version(&builder, 1, minor_version, 0)
+	vkb_instance_err := vkb.instance_builder_build(&builder, &instance)
 	if !testing.expect(t, vkb_instance_err == nil, "Expected vkb_instance_err to be nil") {
-			fmt.eprintfln("%#v", vkb_instance_err)
-			return
+		fmt.eprintfln("%#v", vkb_instance_err)
+		return
 	}
-    return vkb_instance, true
+    return instance, true
 }
 
-get_headless_instance :: proc(t: ^testing.T, minor_version: u32 = 1) -> (instance: ^vkb.Instance, ok: bool) {
-	builder := vkb.create_instance_builder()
-    defer vkb.destroy_instance_builder(builder)
-    vkb.instance_builder_request_validation_layers(builder)
-    vkb.instance_builder_require_api_version(builder, 1, minor_version, 0)
-    vkb.instance_builder_set_headless(builder)
-    vkb_instance, vkb_instance_err := vkb.instance_builder_build(builder)
+get_headless_instance :: proc(t: ^testing.T, minor_version: u32 = 1) -> (instance: vkb.Instance, ok: bool) {
+	builder: vkb.Instance_Builder
+	vkb.instance_builder_init(&builder)
+	defer vkb.instance_builder_uninit(&builder)
+	vkb.instance_builder_request_validation_layers(&builder)
+	vkb.instance_builder_require_api_version(&builder, 1, minor_version, 0)
+	vkb.instance_builder_set_headless(&builder)
+	vkb_instance_err := vkb.instance_builder_build(&builder, &instance)
 	if !testing.expect(t, vkb_instance_err == nil, "Expected vkb_instance_err to be nil") {
-			fmt.eprintfln("%#v", vkb_instance_err)
-			return
+		fmt.eprintfln("%#v", vkb_instance_err)
+		return
 	}
-    return vkb_instance, true
+    return instance, true
 }
 
 byte_arr_str :: proc "contextless" (arr: ^[$N]byte) -> string {
