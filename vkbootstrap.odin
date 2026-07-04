@@ -3122,7 +3122,7 @@ swapchain_builder_utils_find_present_mode :: proc(
 	available_present_modes: ^[]vk.PresentModeKHR,
 	desired_present_modes: ^[dynamic]vk.PresentModeKHR,
 ) -> vk.PresentModeKHR {
-	#reverse for desired in desired_present_modes {
+	for desired in desired_present_modes {
 		for available in available_present_modes {
 			// finds the first present mode that is desired and available
 			if (desired == available) {
