@@ -2989,8 +2989,8 @@ swapchain_builder_utils_add_desired_formats :: proc(formats: ^[dynamic]vk.Surfac
 swapchain_builder_utils_add_desired_present_modes :: proc(
 	present_modes: ^[dynamic]vk.PresentModeKHR,
 ) {
-	append(present_modes, vk.PresentModeKHR.FIFO)
 	append(present_modes, vk.PresentModeKHR.MAILBOX)
+	append(present_modes, vk.PresentModeKHR.FIFO)
 }
 
 Surface_Support_Details :: struct {
